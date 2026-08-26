@@ -19,6 +19,58 @@ st.markdown(
     " 파이썬 엔진 기반의 안정적인 전투와 AI 서사를 즐겨보세요."
 )
 
+# 🎨 [자동 스크롤 튀김 방지 및 스타일 주입 JS]
+st.markdown(
+    """
+    <script>
+        (function() {
+            const pWin = window.parent || window;
+            const pDoc = pWin.document;
+
+            if (pWin.Element && !pWin.Element.prototype._scrollBlocker) {
+                pWin.Element.prototype._scrollBlocker = true;
+                pWin.Element.prototype.scrollIntoView = function() {};
+            }
+
+            function initScrollLock() {
+                const mainEl = pDoc.querySelector('.main') || pDoc.documentElement;
+                if (!mainEl) return;
+
+                if (pWin._savedScrollPos === undefined) {
+                    pWin._savedScrollPos = mainEl.scrollTop;
+                }
+
+                mainEl.addEventListener('scroll', function() {
+                    pWin._savedScrollPos = mainEl.scrollTop;
+                }, { passive: true });
+
+                const restorePos = function() {
+                    if (pWin._savedScrollPos !== undefined && Math.abs(mainEl.scrollTop - pWin._savedScrollPos) > 10) {
+                        mainEl.scrollTop = pWin._savedScrollPos;
+                    }
+                };
+
+                const observer = new MutationObserver(function() {
+                    restorePos();
+                });
+
+                observer.observe(mainEl, { childList: true, subtree: true });
+                restorePos();
+                setTimeout(restorePos, 100);
+                setTimeout(restorePos, 300);
+            }
+
+            if (pDoc.readyState === 'complete' || pDoc.readyState === 'interactive') {
+                initScrollLock();
+            } else {
+                pDoc.addEventListener('DOMContentLoaded', initScrollLock);
+            }
+        })();
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # 💾 [세이브 파일 통합 저장 함수]
 def save_game():
@@ -116,13 +168,23 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 모델 설정
+# 모델 설정 (gemini-3.1-flash-lite 기본 고정)
+available_models = [
+    "gemini-3.1-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.1-flash",
+]
+default_index = (
+    available_models.index("gemini-3.1-flash-lite")
+    if "gemini-3.1-flash-lite" in available_models
+    else 0
+)
+
 selected_model = st.sidebar.selectbox(
-    "Gemini 모델",
-    options=[
-        "gemini-3.1-flash-lite",
-    ],
-    index=0,
+    "Gemini 모델 선택", options=available_models, index=default_index
 )
 
 st.sidebar.markdown("---")
@@ -188,7 +250,21 @@ for sk in stats["skills"]:
   )
 
 st.sidebar.markdown("---")
-if st.sidebar.button("🔄 새 게임 시작"):
+
+# 🧹 [스토리 기록 초기화 버튼]
+if st.sidebar.button("🧹 스토리 기록 초기화 (대화 리셋)"):
+  st.session_state.messages = []
+  if "chat_session" in st.session_state:
+    del st.session_state["chat_session"]
+  if "client" in st.session_state:
+    del st.session_state["client"]
+  st.session_state.game_mode = "EXPLORATION"
+  st.session_state.current_enemy = None
+  save_game()
+  st.success("스토리 기록이 초기화되었습니다!")
+  st.rerun()
+
+if st.sidebar.button("🔄 새 게임 시작 (캐릭터 포함 전체 초기화)"):
   if os.path.exists(SAVE_FILE):
     os.remove(SAVE_FILE)
   for key in list(st.session_state.keys()):
@@ -231,7 +307,6 @@ def process_combat_turn(action_type, skill_obj=None):
   victory = False
   defeat = False
 
-  # 1. 플레이어 행동 처리
   if action_type == "skill" and skill_obj:
     if player["mp"] < skill_obj["mp_cost"]:
       return "마나가 부족하여 스킬을 사용할 수 없습니다!", False, False
@@ -275,7 +350,6 @@ def process_combat_turn(action_type, skill_obj=None):
         f"⚔️ 기본 공격으로 **{enemy['name']}**에게 {dmg}의 피해를 입혔습니다."
     )
 
-  # 적 처치 확인
   if enemy["hp"] <= 0:
     reward_gold = random.randint(15, 30)
     reward_exp = random.randint(40, 60)
@@ -292,7 +366,6 @@ def process_combat_turn(action_type, skill_obj=None):
       )
     victory = True
   else:
-    # 2. 적의 반격 턴 (파이썬이 직접 연산)
     evasion = player["agi"] * 1
     if random.randint(1, 100) <= evasion:
       log_parts.append(
@@ -307,7 +380,7 @@ def process_combat_turn(action_type, skill_obj=None):
       )
 
     if player["hp"] <= 0:
-      player["hp"] = 10  # 구제 조치
+      player["hp"] = 10
       log_parts.append(
           "\n💀 **[전투 패배]** 쓰러졌으나 간신히 목숨을 건져 마을로"
           " 후퇴했습니다."
@@ -435,7 +508,7 @@ else:
       st.rerun()
 
   else:
-    # 💬 [챗 세션 및 클라이언트 세션 상태 보존 설정 (오류 방지)]
+    # 💬 [챗 세션 및 클라이언트 세션 상태 보존 설정]
     if (
         "client" not in st.session_state
         or "chat_session" not in st.session_state
@@ -460,7 +533,7 @@ else:
               parts=[types.Part.from_text(text=m["content"])],
           )
           for m in st.session_state.messages
-          if m.get("role") in ["user", "assistant"]
+          if m.get("role"] in ["user", "assistant"]
       ]
       st.session_state.chat_session = st.session_state.client.chats.create(
           model=selected_model,
@@ -480,7 +553,7 @@ else:
         save_game()
 
     # ==========================================
-    # ⚔️ [전투 모드 UI (파이썬이 직접 턴 제어)]
+    # ⚔️ [전투 모드 UI]
     # ==========================================
     if st.session_state.game_mode == "COMBAT":
       enemy = st.session_state.current_enemy
@@ -496,11 +569,9 @@ else:
       st.markdown("##### ⚔️ 전투 행동 선택")
       c_b1, c_b2, c_b3, c_b4 = st.columns(4)
 
-      # 액션 처리 함수
       def execute_combat_action(action_type, skill=None):
         log_text, victory, defeat = process_combat_turn(action_type, skill)
 
-        # AI에게 전투 턴 결과를 전달하여 멋진 묘사 생성 요청
         narrative_prompt = f"[파이썬 전투 연산 결과]:\n{log_text}\n이 전투 상황을 바탕으로 짧고 박진감 넘치는 소설식 묘사 1~2문장을 작성해줘."
         ai_res = st.session_state.chat_session.send_message(narrative_prompt)
         narrative = ai_res.text
@@ -522,6 +593,10 @@ else:
         elif defeat:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
+
+        # 🧹 [핵심 수정: 최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
+        if len(st.session_state.messages) > 2:
+          st.session_state.messages = st.session_state.messages[-2:]
 
         save_game()
         st.rerun()
@@ -547,12 +622,12 @@ else:
     # 🌍 [일반 탐험 모드 UI]
     # ==========================================
     else:
-      # 메시지 렌더링
+      # 항상 직전 1개의 메시지만 렌더링
       for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
           st.markdown(clean_tags(msg["content"]))
 
-      # 선택지 버튼 추출
+      # 직전 턴의 선택지 버튼만 표시
       current_choices = []
       if st.session_state.messages:
         last_msg = st.session_state.messages[-1]
@@ -577,7 +652,13 @@ else:
           ):
             selected_choice = choice
 
-      st.markdown("<br><br>", unsafe_allow_html=True)
+      # 🔽 [선택지 및 입력창 아래 10칸 빈공간 추가]
+      st.markdown(
+          "<br>" * 10
+          + "<div style='height: 200px;'></div>",
+          unsafe_allow_html=True,
+      )
+
       chat_input = st.chat_input("행동을 입력하세요...")
       user_input = selected_choice or chat_input
 
@@ -599,7 +680,6 @@ else:
               )
               bot_reply = response.text
 
-              # 전투 발생 태그 감지 -> 전투 모드로 전환!
               combat_match = re.search(
                   r"\[START_COMBAT:\s*(\{.*?\})\s*\]", bot_reply, re.DOTALL
               )
@@ -621,6 +701,11 @@ else:
               st.session_state.messages.append(
                   {"role": "assistant", "content": bot_reply}
               )
+
+              # 🧹 [핵심 수정: 최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
+              if len(st.session_state.messages) > 2:
+                st.session_state.messages = st.session_state.messages[-2:]
+
               save_game()
               st.rerun()
 
