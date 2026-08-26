@@ -120,7 +120,10 @@ st.markdown(
 selected_model = st.sidebar.selectbox(
     "Gemini 모델",
     options=[
-        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-3.1-flash",
+        "gemini-3.5-flash",
     ],
     index=0,
 )
@@ -222,7 +225,7 @@ def add_exp(amount):
   return leveled_up
 
 
-# ⚔️ [파이썬 완벽 주도형 턴제 전투 로직 (실시간 인터랙션)]
+# ⚔️ [파이썬 완벽 주도형 턴제 전투 로직]
 def process_combat_turn(action_type, skill_obj=None):
   player = st.session_state.stats
   enemy = st.session_state.current_enemy
@@ -322,8 +325,6 @@ def process_combat_turn(action_type, skill_obj=None):
 if not api_key_input:
   st.warning("⚠️ 좌측 사이드바에 Google Gemini API 키를 입력해 주세요.")
 else:
-  client = genai.Client(api_key=api_key_input)
-
   # 1단계: 종족 선택
   if stats["race"] == "미정":
     st.info("🌍 **[캐릭터 생성 - 1단계]** 당신의 **종족**을 선택하세요.")
@@ -437,8 +438,15 @@ else:
       st.rerun()
 
   else:
-    # 💬 [챗 세션 설정]
-    if "chat_session" not in st.session_state:
+    # 💬 [챗 세션 및 클라이언트 세션 상태 보존 설정 (오류 방지)]
+    if (
+        "client" not in st.session_state
+        or "chat_session" not in st.session_state
+        or st.session_state.get("current_model") != selected_model
+    ):
+      st.session_state.client = genai.Client(api_key=api_key_input)
+      st.session_state.current_model = selected_model
+
       sys_inst = (
           "당신은 에델가르드 대륙의 게임 마스터(GM)입니다.\n"
           "플레이어의 탐험, 마을 활동, 상점 거래 등에 대해 서사를 제공합니다.\n"
@@ -457,7 +465,7 @@ else:
           for m in st.session_state.messages
           if m.get("role") in ["user", "assistant"]
       ]
-      st.session_state.chat_session = client.chats.create(
+      st.session_state.chat_session = st.session_state.client.chats.create(
           model=selected_model,
           history=api_history if api_history else None,
           config=types.GenerateContentConfig(
@@ -508,7 +516,6 @@ else:
         if victory:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
-          # 승리 후 후속 스토리 요청
           post_res = st.session_state.chat_session.send_message(
               "전투에서 승리하여 평화가 찾아왔습니다. 주변 상황 묘사와 다음 행동 선택지[CHOICES: ...]를 제시해 주세요."
           )
@@ -585,7 +592,6 @@ else:
         with st.chat_message("assistant"):
           with st.spinner("게임 마스터가 처리 중입니다..."):
             try:
-              # 현재 스탯 정보를 프롬프트에 주입하여 AI가 현재 상태를 정확히 인지하도록 함
               context_prompt = (
                   f"[현재 캐릭터 상태 - HP:{stats['hp']}/{stats['max_hp']}, MP:{stats['mp']}/{stats['max_mp']}, "
                   f"골드:{stats['gold']}G, 레벨:{stats['level']}, 인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
@@ -610,7 +616,7 @@ else:
                       "max_hp": edata.get("hp", 40),
                       "atk": edata.get("atk", 10),
                   }
-                  bot_reply += f"\n\n🚨 **[경고]** {st.session_state.current_enemy['name']}과의 전투가 시작되었습니다! 좌측/상단 전투 메뉴를 확인하세요."
+                  bot_reply += f"\n\n🚨 **[경고]** {st.session_state.current_enemy['name']}과의 전투가 시작되었습니다! 상단 전투 메뉴를 확인하세요."
                 except Exception:
                   pass
 
