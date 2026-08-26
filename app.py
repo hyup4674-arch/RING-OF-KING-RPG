@@ -572,13 +572,10 @@ else:
       c_b1, c_b2, c_b3, c_b4 = st.columns(4)
 
       def execute_combat_action(action_type, skill=None):
+        # 파이썬 내부 연산만 수행 (API 호출 없음)
         log_text, victory, defeat = process_combat_turn(action_type, skill)
 
-        narrative_prompt = f"[파이썬 전투 연산 결과]:\n{log_text}\n이 전투 상황을 바탕으로 짧고 박진감 넘치는 소설식 묘사 1~2문장을 작성해줘."
-        ai_res = st.session_state.chat_session.send_message(narrative_prompt)
-        narrative = ai_res.text
-
-        full_turn_log = f"⚔️ **[전투 턴]**\n{log_text}\n\n📖 {narrative}"
+        full_turn_log = f"⚔️ **[전투 턴 결과]**\n{log_text}"
         st.session_state.messages.append(
             {"role": "assistant", "content": full_turn_log}
         )
@@ -586,15 +583,22 @@ else:
         if victory:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
-          post_res = st.session_state.chat_session.send_message(
-              "전투에서 승리하여 평화가 찾아왔습니다. 주변 상황 묘사와 다음 행동 선택지[CHOICES: ...]를 제시해 주세요."
+          victory_log = (
+              "🎉 **[탐험 복귀]** 전투에서 승리했습니다! 평화로운 상태로"
+              " 돌아갑니다."
           )
           st.session_state.messages.append(
-              {"role": "assistant", "content": post_res.text}
+              {"role": "assistant", "content": victory_log}
           )
         elif defeat:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
+          defeat_log = (
+              "💀 **[마을 후퇴]** 패배하여 안전한 곳으로 후퇴했습니다."
+          )
+          st.session_state.messages.append(
+              {"role": "assistant", "content": defeat_log}
+          )
 
         if len(st.session_state.messages) > 2:
           st.session_state.messages = st.session_state.messages[-2:]
@@ -651,11 +655,8 @@ else:
           ):
             selected_choice = choice
 
-      st.markdown(
-          "<br>" * 10
-          + "<div style='height: 200px;'></div>",
-          unsafe_allow_html=True,
-      )
+      # 🔽 [하단 여백 3칸으로 축소]
+      st.markdown("<br>" * 3, unsafe_allow_html=True)
 
       chat_input = st.chat_input("행동을 입력하세요...")
       user_input = selected_choice or chat_input
