@@ -521,9 +521,13 @@ else:
       st.session_state.client = genai.Client(api_key=api_key_input)
       st.session_state.current_model = selected_model
 
+      # 🚨 [시스템 지시문 강화: 좌측 상태창 수치를 절대 규칙으로 고정]
       sys_inst = (
           "당신은 에델가르드 대륙의 게임 마스터(GM)입니다.\n"
-          "플레이어의 탐험, 마을 활동, 상점 거래 등에 대해 서사를 제공합니다.\n"
+          "플레이어의 탐험, 마을 활동, 상점 거래 등에 대해 서사를 제공합니다.\n\n"
+          "🚨 [매우 중요 규칙]: \n"
+          "1. 매 턴 제공되는 '[현재 캐릭터 상태]' (레벨, HP, MP, 골드, 인벤토리 등)의 수치를 절대적인 진실로 삼아야 합니다.\n"
+          "2. 플레이어의 레벨, 스탯, 골드 등을 절대 임의로 지어내거나 다르게 말해서는 안 됩니다. (예: 상태창에 레벨 2라고 되어 있다면 반드시 레벨 2를 기준으로 서사하세요.)\n\n"
           "만약 플레이어가 전투를 유발하는 행동을 하면 응답 끝에 반드시 [START_COMBAT: {\"name\": \"적 이름\", \"hp\": 45, \"atk\": 11}] 태그를 넣어 적을 생성하세요.\n"
           "항상 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시하세요."
       )
@@ -550,9 +554,12 @@ else:
       )
 
       if not st.session_state.messages:
-        init_res = st.session_state.chat_session.send_message(
+        init_context = (
+            f"[현재 캐릭터 상태 - 레벨:{stats['level']}, HP:{stats['hp']}/{stats['max_hp']}, "
+            f"MP:{stats['mp']}/{stats['max_mp']}, 골드:{stats['gold']}G, 인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
             f"플레이어가 {stats['race']} 종족 {stats['class_name']} 직업으로 크로스로드 도시 여관에서 모험을 시작합니다. 서막을 열어주세요."
         )
+        init_res = st.session_state.chat_session.send_message(init_context)
         st.session_state.messages.append(
             {"role": "assistant", "content": init_res.text}
         )
@@ -672,8 +679,9 @@ else:
           with st.spinner("게임 마스터가 처리 중입니다..."):
             try:
               context_prompt = (
-                  f"[현재 캐릭터 상태 - HP:{stats['hp']}/{stats['max_hp']}, MP:{stats['mp']}/{stats['max_mp']}, "
-                  f"골드:{stats['gold']}G, 레벨:{stats['level']}, 인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
+                  f"[현재 캐릭터 상태 - 레벨:{stats['level']}, HP:{stats['hp']}/{stats['max_hp']}, "
+                  f"MP:{stats['mp']}/{stats['max_mp']}, 골드:{stats['gold']}G, "
+                  f"인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
                   f"플레이어 행동: {user_input}"
               )
               response = st.session_state.chat_session.send_message(
