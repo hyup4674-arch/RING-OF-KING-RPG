@@ -251,7 +251,11 @@ for sk in stats["skills"]:
 
 st.sidebar.markdown("---")
 
-# 🧹 [스토리 기록 초기화 버튼]
+# 💾 [수동 저장 및 초기화 버튼 섹션]
+if st.sidebar.button("💾 현재 상태 게임 수동 저장"):
+  save_game()
+  st.sidebar.success("게임이 성공적으로 저장되었습니다!")
+
 if st.sidebar.button("🧹 스토리 기록 초기화 (대화 리셋)"):
   st.session_state.messages = []
   if "chat_session" in st.session_state:
@@ -572,7 +576,6 @@ else:
       c_b1, c_b2, c_b3, c_b4 = st.columns(4)
 
       def execute_combat_action(action_type, skill=None):
-        # 파이썬 내부 연산만 수행 (API 호출 없음)
         log_text, victory, defeat = process_combat_turn(action_type, skill)
 
         full_turn_log = f"⚔️ **[전투 턴 결과]**\n{log_text}"
@@ -655,7 +658,6 @@ else:
           ):
             selected_choice = choice
 
-      # 🔽 [하단 여백 3칸으로 축소]
       st.markdown("<br>" * 3, unsafe_allow_html=True)
 
       chat_input = st.chat_input("행동을 입력하세요...")
