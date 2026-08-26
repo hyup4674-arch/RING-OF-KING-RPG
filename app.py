@@ -19,52 +19,52 @@ st.markdown(
     " 파이썬 엔진 기반의 안정적인 전투와 AI 서사를 즐겨보세요."
 )
 
-# 🎨 [자동 스크롤 튀김 방지 및 스타일 주입 JS]
+# 🎨 [스크롤 튕김 완벽 방지 및 세션 스토리지 위치 복원 JS]
 st.markdown(
     """
     <script>
         (function() {
             const pWin = window.parent || window;
             const pDoc = pWin.document;
+            const SCROLL_KEY = 'rpg_scroll_pos_lock';
 
-            if (pWin.Element && !pWin.Element.prototype._scrollBlocker) {
-                pWin.Element.prototype._scrollBlocker = true;
-                pWin.Element.prototype.scrollIntoView = function() {};
+            function getScrollContainer() {
+                return pDoc.querySelector('[data-testid="stAppViewContainer"]') || pDoc.querySelector('.main') || pWin;
             }
 
-            function initScrollLock() {
-                const mainEl = pDoc.querySelector('.main') || pDoc.documentElement;
-                if (!mainEl) return;
+            // 스크롤 위치 실시간 저장
+            const container = getScrollContainer();
+            const savePos = function() {
+                const pos = (container !== pWin) ? container.scrollTop : (pWin.pageYOffset || pDoc.documentElement.scrollTop);
+                pWin.sessionStorage.setItem(SCROLL_KEY, pos);
+            };
 
-                if (pWin._savedScrollPos === undefined) {
-                    pWin._savedScrollPos = mainEl.scrollTop;
-                }
-
-                mainEl.addEventListener('scroll', function() {
-                    pWin._savedScrollPos = mainEl.scrollTop;
-                }, { passive: true });
-
-                const restorePos = function() {
-                    if (pWin._savedScrollPos !== undefined && Math.abs(mainEl.scrollTop - pWin._savedScrollPos) > 10) {
-                        mainEl.scrollTop = pWin._savedScrollPos;
-                    }
-                };
-
-                const observer = new MutationObserver(function() {
-                    restorePos();
-                });
-
-                observer.observe(mainEl, { childList: true, subtree: true });
-                restorePos();
-                setTimeout(restorePos, 100);
-                setTimeout(restorePos, 300);
-            }
-
-            if (pDoc.readyState === 'complete' || pDoc.readyState === 'interactive') {
-                initScrollLock();
+            if (container !== pWin) {
+                container.addEventListener('scroll', savePos, { passive: true });
             } else {
-                pDoc.addEventListener('DOMContentLoaded', initScrollLock);
+                pWin.addEventListener('scroll', savePos, { passive: true });
             }
+
+            // 스크롤 위치 복원 함수
+            function restoreScroll() {
+                const saved = pWin.sessionStorage.getItem(SCROLL_KEY);
+                if (saved !== null) {
+                    const targetPos = parseInt(saved, 10);
+                    const cont = getScrollContainer();
+                    if (cont !== pWin) {
+                        cont.scrollTop = targetPos;
+                    } else {
+                        pWin.scrollTo(0, targetPos);
+                    }
+                }
+            }
+
+            // 페이지 로드 및 렌더링 직후 반복 복원하여 튕김 방지
+            pWin.addEventListener('DOMContentLoaded', restoreScroll);
+            setTimeout(restoreScroll, 10);
+            setTimeout(restoreScroll, 50);
+            setTimeout(restoreScroll, 150);
+            setTimeout(restoreScroll, 300);
         })();
     </script>
     """,
@@ -523,8 +523,7 @@ else:
           "만약 플레이어가 전투를 유발하는 행동을 하면 응답 끝에 반드시 [START_COMBAT: {\"name\": \"적 이름\", \"hp\": 45, \"atk\": 11}] 태그를 넣어 적을 생성하세요.\n"
           "항상 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시하세요."
       )
-      
-      # 🛠️ [오타 수정 완료 부분]
+
       api_history = [
           types.Content(
               role=(
@@ -537,7 +536,7 @@ else:
           for m in st.session_state.messages
           if m.get("role") in ["user", "assistant"]
       ]
-      
+
       st.session_state.chat_session = st.session_state.client.chats.create(
           model=selected_model,
           history=api_history if api_history else None,
@@ -597,7 +596,6 @@ else:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
 
-        # 🧹 [최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
         if len(st.session_state.messages) > 2:
           st.session_state.messages = st.session_state.messages[-2:]
 
@@ -625,12 +623,10 @@ else:
     # 🌍 [일반 탐험 모드 UI]
     # ==========================================
     else:
-      # 항상 직전 1개의 메시지만 렌더링
       for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
           st.markdown(clean_tags(msg["content"]))
 
-      # 직전 턴의 선택지 버튼만 표시
       current_choices = []
       if st.session_state.messages:
         last_msg = st.session_state.messages[-1]
@@ -655,7 +651,6 @@ else:
           ):
             selected_choice = choice
 
-      # 🔽 [선택지 및 입력창 아래 10칸 빈공간 추가]
       st.markdown(
           "<br>" * 10
           + "<div style='height: 200px;'></div>",
@@ -705,7 +700,6 @@ else:
                   {"role": "assistant", "content": bot_reply}
               )
 
-              # 🧹 [최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
               if len(st.session_state.messages) > 2:
                 st.session_state.messages = st.session_state.messages[-2:]
 
