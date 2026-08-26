@@ -523,18 +523,21 @@ else:
           "만약 플레이어가 전투를 유발하는 행동을 하면 응답 끝에 반드시 [START_COMBAT: {\"name\": \"적 이름\", \"hp\": 45, \"atk\": 11}] 태그를 넣어 적을 생성하세요.\n"
           "항상 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시하세요."
       )
+      
+      # 🛠️ [오타 수정 완료 부분]
       api_history = [
           types.Content(
               role=(
                   "model"
-                  if m["role"] == "assistant"
-                  else ("user" if m["role"] == "user" else None)
+                  if m.get("role") == "assistant"
+                  else ("user" if m.get("role") == "user" else None)
               ),
-              parts=[types.Part.from_text(text=m["content"])],
+              parts=[types.Part.from_text(text=m.get("content", ""))],
           )
           for m in st.session_state.messages
-          if m.get("role"] in ["user", "assistant"]
+          if m.get("role") in ["user", "assistant"]
       ]
+      
       st.session_state.chat_session = st.session_state.client.chats.create(
           model=selected_model,
           history=api_history if api_history else None,
@@ -594,7 +597,7 @@ else:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
 
-        # 🧹 [핵심 수정: 최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
+        # 🧹 [최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
         if len(st.session_state.messages) > 2:
           st.session_state.messages = st.session_state.messages[-2:]
 
@@ -702,7 +705,7 @@ else:
                   {"role": "assistant", "content": bot_reply}
               )
 
-              # 🧹 [핵심 수정: 최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
+              # 🧹 [최신 1개 턴만 남기고 이전 대화 기록 자동 삭제]
               if len(st.session_state.messages) > 2:
                 st.session_state.messages = st.session_state.messages[-2:]
 
