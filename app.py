@@ -32,7 +32,6 @@ st.markdown(
                 return pDoc.querySelector('[data-testid="stAppViewContainer"]') || pDoc.querySelector('.main') || pWin;
             }
 
-            // 스크롤 위치 실시간 저장
             const container = getScrollContainer();
             const savePos = function() {
                 const pos = (container !== pWin) ? container.scrollTop : (pWin.pageYOffset || pDoc.documentElement.scrollTop);
@@ -45,7 +44,6 @@ st.markdown(
                 pWin.addEventListener('scroll', savePos, { passive: true });
             }
 
-            // 스크롤 위치 복원 함수
             function restoreScroll() {
                 const saved = pWin.sessionStorage.getItem(SCROLL_KEY);
                 if (saved !== null) {
@@ -59,7 +57,6 @@ st.markdown(
                 }
             }
 
-            // 페이지 로드 및 렌더링 직후 반복 복원하여 튕김 방지
             pWin.addEventListener('DOMContentLoaded', restoreScroll);
             setTimeout(restoreScroll, 10);
             setTimeout(restoreScroll, 50);
@@ -82,6 +79,61 @@ def save_game():
   }
   with open(SAVE_FILE, "w", encoding="utf-8") as f:
     json.dump(data, f, ensure_ascii=False)
+
+
+# 🛡️ [장비 자동 장착 및 정화 함수]
+def auto_equip_items():
+  player = st.session_state.stats
+  if "equipment" not in player:
+    player["equipment"] = {"무기": "초보자의 무기", "갑옷": "여행자 가죽옷"}
+  if "inventory" not in player:
+    player["inventory"] = []
+
+  inventory = player["inventory"]
+  weapon_keywords = [
+      "검",
+      "창",
+      "활",
+      "지팡이",
+      "도끼",
+      "단검",
+      "메이스",
+      "완드",
+      "무기",
+      "블레이드",
+      "소드",
+      "스태프",
+      "대검",
+  ]
+  armor_keywords = [
+      "갑옷",
+      "로브",
+      "옷",
+      "갑주",
+      "플레이트",
+      "가죽옷",
+      "튜닉",
+  ]
+
+  new_inventory = []
+  for item in inventory:
+    is_weapon = any(kw in item for kw in weapon_keywords)
+    is_armor = any(kw in item for kw in armor_keywords)
+
+    if is_weapon:
+      old_weapon = player["equipment"].get("무기", "초보자의 무기")
+      player["equipment"]["무기"] = item
+      if old_weapon != "초보자의 무기":
+        new_inventory.append(old_weapon)
+    elif is_armor:
+      old_armor = player["equipment"].get("갑옷", "여행자 가죽옷")
+      player["equipment"]["갑옷"] = item
+      if old_armor != "여행자 가죽옷":
+        new_inventory.append(old_armor)
+    else:
+      new_inventory.append(item)
+  player["inventory"] = new_inventory
+  save_game()
 
 
 # 🧹 [스킬 구조화 및 규격 정화 함수]
@@ -168,7 +220,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# 모델 설정 (gemini-3.1-flash-lite 기본 고정)
 available_models = [
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash-lite",
@@ -249,9 +300,43 @@ for sk in stats["skills"]:
       f"🗡️ **{sk['name']}** (위력:{sk['power']}, MP:{sk['mp_cost']})"
   )
 
+# 🛡️ [장착 장비 및 인벤토리 표시 섹션]
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚔️ 장착 장비")
+equipment = stats.get(
+    "equipment", {"무기": "초보자의 무기", "갑옷": "여행자 가죽옷"}
+)
+for slot, gear_name in equipment.items():
+  st.sidebar.write(f"- **{slot}**: {gear_name}")
+
+st.sidebar.subheader("🎒 인벤토리")
+inventory = stats.get("inventory", [])
+if inventory:
+  for inv_item in inventory:
+    st.sidebar.write(f"- {inv_item}")
+else:
+  st.sidebar.write("- 텅 비어 있음")
+
 st.sidebar.markdown("---")
 
-# 💾 [수동 저장 및 초기화 버튼 섹션]
+# 📁 [세이브 파일 업로드 및 관리 메뉴]
+uploaded_file = st.sidebar.file_uploader(
+    "📁 저장된 파일(.json) 불러오기", type=["json"]
+)
+if uploaded_file is not None:
+  try:
+    loaded_json = json.load(uploaded_file)
+    if isinstance(loaded_json, dict) and "stats" in loaded_json:
+      st.session_state.stats = loaded_json["stats"]
+      st.session_state.messages = loaded_json.get("messages", [])
+      st.session_state.game_mode = loaded_json.get("game_mode", "EXPLORATION")
+      st.session_state.current_enemy = loaded_json.get("current_enemy", None)
+      save_game()
+      st.sidebar.success("세이브 파일이 성공적으로 적용되었습니다!")
+      st.rerun()
+  except Exception as e:
+    st.sidebar.error(f"파일 로드 실패: {e}")
+
 if st.sidebar.button("💾 현재 상태 게임 수동 저장"):
   save_game()
   st.sidebar.success("게임이 성공적으로 저장되었습니다!")
@@ -280,6 +365,7 @@ if st.sidebar.button("🔄 새 게임 시작 (캐릭터 포함 전체 초기화)
 def clean_tags(text):
   text = re.sub(r"\[START_COMBAT:\s*(\{.*?\})\s*\]", "", text, flags=re.DOTALL)
   text = re.sub(r"\[CHOICES:\s*(\[.*?\])\s*\]", "", text, flags=re.DOTALL)
+  text = re.sub(r"\[ITEM_GAIN:\s*\"(.*?)\"\s*\]", "", text, flags=re.DOTALL)
   return text.strip()
 
 
@@ -521,15 +607,16 @@ else:
       st.session_state.client = genai.Client(api_key=api_key_input)
       st.session_state.current_model = selected_model
 
-      # 🚨 [시스템 지시문 강화: 좌측 상태창 수치를 절대 규칙으로 고정]
+      # 🚨 [시스템 지시문: 좌측 상태창과 완벽한 동기화 강제 규정]
       sys_inst = (
           "당신은 에델가르드 대륙의 게임 마스터(GM)입니다.\n"
           "플레이어의 탐험, 마을 활동, 상점 거래 등에 대해 서사를 제공합니다.\n\n"
-          "🚨 [매우 중요 규칙]: \n"
-          "1. 매 턴 제공되는 '[현재 캐릭터 상태]' (레벨, HP, MP, 골드, 인벤토리 등)의 수치를 절대적인 진실로 삼아야 합니다.\n"
-          "2. 플레이어의 레벨, 스탯, 골드 등을 절대 임의로 지어내거나 다르게 말해서는 안 됩니다. (예: 상태창에 레벨 2라고 되어 있다면 반드시 레벨 2를 기준으로 서사하세요.)\n\n"
-          "만약 플레이어가 전투를 유발하는 행동을 하면 응답 끝에 반드시 [START_COMBAT: {\"name\": \"적 이름\", \"hp\": 45, \"atk\": 11}] 태그를 넣어 적을 생성하세요.\n"
-          "항상 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시하세요."
+          "🚨 [매우 중요 규칙 - 상태 완벽 동기화]:\n"
+          "1. 매 턴 제공되는 '[현재 캐릭터 상태 동기화 정보]'에 포함된 레벨, HP, MP, 골드, 장비, 인벤토리 등 모든 수치는 좌측 상태창과 100% 동일합니다.\n"
+          "2. 플레이어의 레벨이나 스탯을 절대 임의로 변경하거나 왜곡해서 서사하지 마세요. (상태창의 레벨과 수치를 절대적인 진실로 따르세요.)\n"
+          "3. 플레이어가 아이템을 획득하는 경우 응답에 반드시 [ITEM_GAIN: \"아이템이름\"] 태그를 포함하세요.\n"
+          "4. 플레이어가 전투를 유발하는 행동을 하면 응답 끝에 반드시 [START_COMBAT: {\"name\": \"적 이름\", \"hp\": 45, \"atk\": 11}] 태그를 넣어 적을 생성하세요.\n"
+          "5. 항상 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시하세요."
       )
 
       api_history = [
@@ -555,8 +642,15 @@ else:
 
       if not st.session_state.messages:
         init_context = (
-            f"[현재 캐릭터 상태 - 레벨:{stats['level']}, HP:{stats['hp']}/{stats['max_hp']}, "
-            f"MP:{stats['mp']}/{stats['max_mp']}, 골드:{stats['gold']}G, 인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
+            f"[현재 캐릭터 상태 동기화 정보]\n"
+            f"- 종족: {stats['race']}\n"
+            f"- 직업: {stats['class_name']}\n"
+            f"- 레벨: {stats['level']} (경험치: {stats['exp']}/{stats['max_exp']})\n"
+            f"- 체력(HP): {stats['hp']}/{stats['max_hp']}\n"
+            f"- 마나(MP): {stats['mp']}/{stats['max_mp']}\n"
+            f"- 골드: {stats['gold']}G\n"
+            f"- 장착 장비: {json.dumps(stats.get('equipment', {}), ensure_ascii=False)}\n"
+            f"- 인벤토리: {json.dumps(stats['inventory'], ensure_ascii=False)}\n\n"
             f"플레이어가 {stats['race']} 종족 {stats['class_name']} 직업으로 크로스로드 도시 여관에서 모험을 시작합니다. 서막을 열어주세요."
         )
         init_res = st.session_state.chat_session.send_message(init_context)
@@ -665,7 +759,7 @@ else:
           ):
             selected_choice = choice
 
-      st.markdown("<br>" * 3, unsafe_allow_html=True)
+      # 🔽 [하단 빈칸 공백 완전히 제거 완료]
 
       chat_input = st.chat_input("행동을 입력하세요...")
       user_input = selected_choice or chat_input
@@ -678,16 +772,33 @@ else:
         with st.chat_message("assistant"):
           with st.spinner("게임 마스터가 처리 중입니다..."):
             try:
+              # 🔄 매 턴 현재 상태를 AI에게 정확하게 주입하여 동기화
               context_prompt = (
-                  f"[현재 캐릭터 상태 - 레벨:{stats['level']}, HP:{stats['hp']}/{stats['max_hp']}, "
-                  f"MP:{stats['mp']}/{stats['max_mp']}, 골드:{stats['gold']}G, "
-                  f"인벤토리:{json.dumps(stats['inventory'], ensure_ascii=False)}]\n"
+                  f"[현재 캐릭터 상태 동기화 정보]\n"
+                  f"- 종족: {stats['race']}\n"
+                  f"- 직업: {stats['class_name']}\n"
+                  f"- 레벨: {stats['level']} (경험치: {stats['exp']}/{stats['max_exp']})\n"
+                  f"- 체력(HP): {stats['hp']}/{stats['max_hp']}\n"
+                  f"- 마나(MP): {stats['mp']}/{stats['max_mp']}\n"
+                  f"- 골드: {stats['gold']}G\n"
+                  f"- 장착 장비: {json.dumps(stats.get('equipment', {}), ensure_ascii=False)}\n"
+                  f"- 인벤토리: {json.dumps(stats['inventory'], ensure_ascii=False)}\n\n"
                   f"플레이어 행동: {user_input}"
               )
               response = st.session_state.chat_session.send_message(
                   context_prompt
               )
               bot_reply = response.text
+
+              # 🎁 [아이템 획득 태그 감지 및 자동 장착 처리]
+              item_gain_match = re.search(
+                  r"\[ITEM_GAIN:\s*\"(.*?)\"\s*\]", bot_reply
+              )
+              if item_gain_match:
+                acquired_item = item_gain_match.group(1)
+                stats["inventory"].append(acquired_item)
+                auto_equip_items()  # 좋은 장비 자동 장착 검사
+                bot_reply += f"\n\n✨ **[획득 및 장착 완료]** '{acquired_item}'을(를) 획득하여 자동 장착되거나 인벤토리에 보관되었습니다!"
 
               combat_match = re.search(
                   r"\[START_COMBAT:\s*(\{.*?\})\s*\]", bot_reply, re.DOTALL
