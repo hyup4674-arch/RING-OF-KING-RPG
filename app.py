@@ -84,10 +84,7 @@ class GameResponse(BaseModel):
     enemy_hp: int = Field(default=0, description="전투 시작 시 적의 체력")
     enemy_atk: int = Field(default=0, description="전투 시작 시 적의 공격력")
     choices: list[str] = Field(
-        description=(
-            "플레이어가 다음에 선택할 수 있는 행동지침 3~4가지 (예: ['앞으로"
-            " 전진한다', '주변을 수색한다'])"
-        )
+        description="플레이어가 다음에 선택할 수 있는 행동지침 3~4가지"
     )
 
 
@@ -103,12 +100,14 @@ def save_game():
         json.dump(data, f, ensure_ascii=False)
 
 
-# 📊 [상태 초기화]
-saved_data = None
+# 📊 [상태 초기화 (안전한 타입 체크 적용)]
+saved_data = {}
 if os.path.exists(SAVE_FILE):
     try:
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
-            saved_data = json.load(f)
+            content = json.load(f)
+            if isinstance(content, dict):
+                saved_data = content
     except Exception:
         pass
 
@@ -204,8 +203,7 @@ st.sidebar.metric(label="💰 골드", value=f"{stats['gold']} G")
 
 st.sidebar.markdown("##### 📊 능력치")
 st.sidebar.write(
-    f"- 💪 힘: {stats['str']} | 🧠 지능: {stats['int']} | ❤️ 체력: {stats['con']}"
-    f" | ⚡ 민첩: {stats['agi']}"
+    f"- 💪 힘: {stats['str']} | 🧠 지능: {stats['int']} | ❤️ 체력: {stats['con']} | ⚡ 민첩: {stats['agi']}"
 )
 
 if stats.get("stat_points", 0) > 0:
@@ -247,7 +245,6 @@ if st.sidebar.button("🔄 새 게임 시작 (초기화)"):
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
 
-    # 누적 대화 기록 및 현재 스탯 주입
     system_instruction = (
         "당신은 에델가르드 판타지 RPG의 게임 마스터(GM)입니다.\n"
         "플레이어의 행동에 따라 서사를 진행하고, 체력/마나/골드/경험치 변동 사항을 정확한 숫자로 함께 산출하세요.\n"
@@ -275,7 +272,6 @@ def call_gemini_turn(user_action):
                 temperature=0.7,
             ),
         )
-        # Pydantic 모델로 파싱된 결과 반환
         return GameResponse.model_validate_json(response.text)
     except Exception as e:
         st.error(f"Gemini API 호출 오류: {e}")
@@ -324,11 +320,9 @@ else:
         if chosen:
             stats["class_name"] = chosen
             stats["skills"] = [{"name": "기본 공격", "power": 15, "mp_cost": 0}]
-            # 첫 시작 스토리 트리거
             with st.spinner("모험의 세계를 생성하는 중..."):
                 res = call_gemini_turn(
-                    f"나는 {stats['race']} 종족 {stats['class_name']}"
-                    " 직업으로 여관에서 모험을 시작한다. 오프닝을 열어줘."
+                    f"나는 {stats['race']} 종족 {stats['class_name']} 직업으로 여관에서 모험을 시작한다. 오프닝을 열어줘."
                 )
                 if res:
                     st.session_state.history.append({
@@ -365,12 +359,13 @@ else:
                     st.session_state.game_mode = "EXPLORATION"
                     st.session_state.current_enemy = None
                     msg = (
-                        f"🎉 적을 처치했습니다! (보상: {gold_rew}G, {exp_rew}"
-                        f" EXP){' [레벨 업!]' if leveled else ''}"
+                        f"🎉 적을 처치했습니다! (보상: {gold_rew}G, {exp_rew} EXP){' [레벨 업!]' if leveled else ''}"
                     )
-                    st.session_state.history.append(
-                        {"role": "assistant", "narrative": msg, "choices": ["마을로 돌아간다", "계속 탐험한다"]}
-                    )
+                    st.session_state.history.append({
+                        "role": "assistant",
+                        "narrative": msg,
+                        "choices": ["마을로 돌아간다", "계속 탐험한다"],
+                    })
                 elif stats["hp"] <= 0:
                     stats["hp"] = 10
                     st.session_state.game_mode = "EXPLORATION"
@@ -385,12 +380,10 @@ else:
 
         # 탐험 모드
         else:
-            # 대화 기록 출력
             for h in st.session_state.history:
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
 
-            # 마지막 응답의 선택지 버튼 제공
             current_choices = []
             if st.session_state.history:
                 last_h = st.session_state.history[-1]
@@ -421,7 +414,6 @@ else:
                     res = call_gemini_turn(final_input)
 
                     if res:
-                        # 🔒 [핵심 동기화] AI가 계산한 수치를 파이썬 변수에 100% 안전하게 즉시 반영
                         stats["hp"] = max(
                             0,
                             min(
@@ -446,7 +438,6 @@ else:
                         if res.item_gained:
                             stats["inventory"].append(res.item_gained)
 
-                        # 전투 시작 여부 판단
                         if res.start_combat:
                             st.session_state.game_mode = "COMBAT"
                             st.session_state.current_enemy = {
@@ -460,14 +451,12 @@ else:
                                 ),
                             }
 
-                        # 스토리 기록 추가
                         st.session_state.history.append({
                             "role": "assistant",
                             "narrative": res.narrative,
                             "choices": res.choices,
                         })
 
-                        # 최근 6개 기록만 유지
                         if len(st.session_state.history) > 6:
                             st.session_state.history = (
                                 st.session_state.history[-6:]
