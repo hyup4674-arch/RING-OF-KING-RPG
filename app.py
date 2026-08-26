@@ -679,29 +679,77 @@ else:
       def execute_combat_action(action_type, skill=None):
         log_text, victory, defeat = process_combat_turn(action_type, skill)
 
-        full_turn_log = f"⚔️ **[전투 턴 결과]**\n{log_text}"
-        st.session_state.messages.append(
-            {"role": "assistant", "content": full_turn_log}
-        )
-
         if victory:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
-          victory_log = (
-              "🎉 **[탐험 복귀]** 전투에서 승리했습니다! 평화로운 상태로"
-              " 돌아갑니다."
+
+          # 전투 승리 후 AI에게 곧바로 후속 서사와 선택지를 요구하도록 프롬프트 전달
+          aftermath_prompt = (
+              f"⚔️ [전투 턴 결과 및 승리]\n{log_text}\n\n"
+              f"[현재 캐릭터 상태 동기화 정보]\n"
+              f"- 레벨: {stats['level']} (경험치: {stats['exp']}/{stats['max_exp']})\n"
+              f"- 체력(HP): {stats['hp']}/{stats['max_hp']}\n"
+              f"- 마나(MP): {stats['mp']}/{stats['max_mp']}\n"
+              f"- 골드: {stats['gold']}G\n"
+              f"- 장착 장비: {json.dumps(stats.get('equipment', {}), ensure_ascii=False)}\n"
+              f"- 인벤토리: {json.dumps(stats['inventory'], ensure_ascii=False)}\n\n"
+              f"플레이어가 적과의 전투에서 승리했습니다! 전투가 끝난 직후의 상황을 생생하게 묘사하고, "
+              f"반드시 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시해주세요."
           )
-          st.session_state.messages.append(
-              {"role": "assistant", "content": victory_log}
-          )
+          try:
+            response = st.session_state.chat_session.send_message(
+                aftermath_prompt
+            )
+            bot_reply = response.text
+            st.session_state.messages.append(
+                {"role": "assistant", "content": bot_reply}
+            )
+          except Exception as e:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": (
+                    f"⚔️ **[전투 결과]**\n{log_text}\n\n🎉 전투에서 승리하여 탐험으로"
+                    " 복귀했습니다!"
+                ),
+            })
+
         elif defeat:
           st.session_state.game_mode = "EXPLORATION"
           st.session_state.current_enemy = None
-          defeat_log = (
-              "💀 **[마을 후퇴]** 패배하여 안전한 곳으로 후퇴했습니다."
+
+          # 전투 패배 후 AI에게 후속 서사와 선택지 요구
+          aftermath_prompt = (
+              f"⚔️ [전투 턴 결과 및 패배]\n{log_text}\n\n"
+              f"[현재 캐릭터 상태 동기화 정보]\n"
+              f"- 레벨: {stats['level']} (경험치: {stats['exp']}/{stats['max_exp']})\n"
+              f"- 체력(HP): {stats['hp']}/{stats['max_hp']}\n"
+              f"- 마나(MP): {stats['mp']}/{stats['max_mp']}\n"
+              f"- 골드: {stats['gold']}G\n"
+              f"- 장착 장비: {json.dumps(stats.get('equipment', {}), ensure_ascii=False)}\n"
+              f"- 인벤토리: {json.dumps(stats['inventory'], ensure_ascii=False)}\n\n"
+              f"플레이어가 전투에서 패배하여 안전한 곳으로 후퇴했습니다. 후퇴 이후의 상황을 묘사하고, "
+              f"반드시 응답 마지막에 3~4개의 행동 선택지를 [CHOICES: [\"선택지1\", \"선택지2\"]] 형태로 제시해주세요."
           )
+          try:
+            response = st.session_state.chat_session.send_message(
+                aftermath_prompt
+            )
+            bot_reply = response.text
+            st.session_state.messages.append(
+                {"role": "assistant", "content": bot_reply}
+            )
+          except Exception as e:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": (
+                    f"⚔️ **[전투 결과]**\n{log_text}\n\n💀 패배하여 마을로"
+                    " 후퇴했습니다."
+                ),
+            })
+        else:
+          full_turn_log = f"⚔️ **[전투 턴 결과]**\n{log_text}"
           st.session_state.messages.append(
-              {"role": "assistant", "content": defeat_log}
+              {"role": "assistant", "content": full_turn_log}
           )
 
         if len(st.session_state.messages) > 2:
@@ -759,8 +807,6 @@ else:
           ):
             selected_choice = choice
 
-      # 🔽 [하단 빈칸 공백 완전히 제거 완료]
-
       chat_input = st.chat_input("행동을 입력하세요...")
       user_input = selected_choice or chat_input
 
@@ -772,7 +818,6 @@ else:
         with st.chat_message("assistant"):
           with st.spinner("게임 마스터가 처리 중입니다..."):
             try:
-              # 🔄 매 턴 현재 상태를 AI에게 정확하게 주입하여 동기화
               context_prompt = (
                   f"[현재 캐릭터 상태 동기화 정보]\n"
                   f"- 종족: {stats['race']}\n"
@@ -790,14 +835,13 @@ else:
               )
               bot_reply = response.text
 
-              # 🎁 [아이템 획득 태그 감지 및 자동 장착 처리]
               item_gain_match = re.search(
                   r"\[ITEM_GAIN:\s*\"(.*?)\"\s*\]", bot_reply
               )
               if item_gain_match:
                 acquired_item = item_gain_match.group(1)
                 stats["inventory"].append(acquired_item)
-                auto_equip_items()  # 좋은 장비 자동 장착 검사
+                auto_equip_items()
                 bot_reply += f"\n\n✨ **[획득 및 장착 완료]** '{acquired_item}'을(를) 획득하여 자동 장착되거나 인벤토리에 보관되었습니다!"
 
               combat_match = re.search(
