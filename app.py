@@ -67,7 +67,7 @@ def save_game():
         json.dump(data, f, ensure_ascii=False)
 
 
-# 📊 [상태 초기화]
+# 📊 [상태 초기화 및 JSON 키 복구]
 saved_data = {}
 if os.path.exists(SAVE_FILE):
     try:
@@ -75,6 +75,13 @@ if os.path.exists(SAVE_FILE):
             content = json.load(f)
             if isinstance(content, dict):
                 saved_data = content
+                if "stats" in saved_data:
+                    for p_key in ["hp_potions", "mp_potions"]:
+                        if p_key in saved_data["stats"]:
+                            saved_data["stats"][p_key] = {
+                                int(k): v
+                                for k, v in saved_data["stats"][p_key].items()
+                            }
     except Exception:
         pass
 
@@ -261,13 +268,11 @@ api_key_input = st.sidebar.text_input(
     "Google Gemini API 키", value=DEFAULT_API_KEY, type="password"
 )
 
-# 💾 [신규 기능] 세이브 파일 백업 및 복구 섹션
 with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 필수)"):
     st.write(
         "클라우드 서버 초기화 방지를 위해 플레이 데이터를 파일로 백업하세요."
     )
 
-    # 1. 다운로드 버튼
     save_game()
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
@@ -282,7 +287,6 @@ with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 �
 
     st.markdown("---")
 
-    # 2. 업로드 버튼 (복구)
     uploaded_file = st.file_uploader(
         "📤 백업했던 세이브 파일 업로드", type=["json"]
     )
@@ -301,7 +305,6 @@ with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 �
         except Exception as e:
             st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
 
-# Flash-Lite 계열/상위 변형 모델 5선 정의
 flash_lite_models = [
     {
         "id": "gemini-3.1-flash-lite",
@@ -355,7 +358,6 @@ st.sidebar.write(
     f"- 힘: {stats['str']} | 민첩: {stats['agi']} | 체력: {stats['con']} | 지능: {stats['int']}"
 )
 
-# ⚔️ [전투력 및 장비 현황]
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚔️ 전투력 및 장비 현황")
 current_atk = int(
@@ -418,7 +420,6 @@ with st.sidebar.expander("🔮 보유 마법 및 스킬"):
     else:
         st.write("습득한 스킬 없음")
 
-# 스탯 분배 UI
 if stats.get("stat_points", 0) > 0:
     st.sidebar.markdown("---")
     st.sidebar.success(f"잔여 스탯 포인트: {stats['stat_points']} P")
@@ -642,7 +643,6 @@ with tab_magic:
                     st.error("골드가 부족합니다!")
 
 
-# 🤖 [AI 호출 함수]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
     system_instruction = (
@@ -679,7 +679,6 @@ def call_gemini_turn(user_action):
         return None
 
 
-# 🎮 [메인 화면 분기: 탐험 vs 전투]
 if not api_key_input:
     st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
 else:
@@ -699,7 +698,7 @@ else:
                 st.markdown("**[체력 포션 사용]**")
                 for p_price, p_count in list(stats["hp_potions"].items()):
                     if p_count > 0:
-                        heal_val = int(p_price * 1.5)
+                        heal_val = int(int(p_price) * 1.5)
                         if st.button(
                             f"체력 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
                             key=f"combat_hp_{p_price}",
@@ -720,7 +719,7 @@ else:
                 st.markdown("**[마나 포션 사용]**")
                 for p_price, p_count in list(stats["mp_potions"].items()):
                     if p_count > 0:
-                        heal_val = int(p_price * 2.0)
+                        heal_val = int(int(p_price) * 2.0)
                         if st.button(
                             f"마나 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
                             key=f"combat_mp_{p_price}",
