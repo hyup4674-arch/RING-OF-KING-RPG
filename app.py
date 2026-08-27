@@ -197,15 +197,15 @@ if "stats" not in st.session_state:
             "max_hp": 70,
             "mp": 35,
             "max_mp": 35,
-            "gold": 10,  # 시작 골드 10G
+            "gold": 10,
             "level": 1,
             "exp": 0,
             "max_exp": 100,
-            "str": 5,  # 초기 능력치 5
+            "str": 5,
             "agi": 5,
             "con": 5,
             "int": 5,
-            "stat_points": 0,  # 보너스 스탯 없음
+            "stat_points": 0,
             "skill_points": 0,
             "hp_potions": {100: 0},
             "mp_potions": {100: 0},
@@ -257,7 +257,7 @@ def add_exp(amount):
         player["exp"] -= player["max_exp"]
         player["level"] += 1
         player["max_exp"] = int(player["max_exp"] * 1.4)
-        player["stat_points"] += 2  # 레벨당 2포인트 부여
+        player["stat_points"] += 2
         player["skill_points"] += 1
         player["max_hp"] += 10
         player["hp"] = player["max_hp"]
@@ -371,51 +371,6 @@ def generate_stat_milestone_reward(
             )
     except Exception:
         pass
-
-
-# 🤖 [AI 마을 대사 생성 함수]
-def append_ai_village_dialogue(facility_name, action_desc):
-    api_key = api_key_input
-    if not api_key:
-        st.session_state.history.append({
-            "role": "assistant",
-            "narrative": f"[마을 시설: {facility_name}] {action_desc}",
-            "choices": ["마을 광장으로 돌아간다", "다른 시설을 이용한다"],
-        })
-        trim_ai_history()
-        return
-
-    client = genai.Client(api_key=api_key)
-    prompt = (
-        f"판타지 RPG의 마을 시설인 '{facility_name}'에서 플레이어가 다음 행동을 수행했습니다: '{action_desc}'. "
-        f"NPC의 개성 있는 대사와 현장감을 살린 서사를 **반드시 1~2문장 이내로 매우 간결하게** 묘사해주세요."
-    )
-
-    response_text = None
-    for attempt in range(3):
-        try:
-            response = client.models.generate_content(
-                model=selected_model,
-                contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.7),
-            )
-            response_text = response.text.strip() if response.text else None
-            break
-        except Exception:
-            if attempt < 2:
-                time.sleep(2)
-
-    narrative = (
-        response_text
-        if response_text
-        else f"'{facility_name}'에서의 볼일을 마쳤습니다."
-    )
-    st.session_state.history.append({
-        "role": "assistant",
-        "narrative": f"🏛️ **[{facility_name}]**\n{narrative}",
-        "choices": ["모험을 계속한다", "마을에 머문다"],
-    })
-    trim_ai_history()
 
 
 # ⚙️ [좌측 슬라이드 창 설정]
@@ -588,10 +543,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         if w not in stats["inventory_weapons"]:
                             stats["inventory_weapons"].append(w)
                         stats["equipped_weapon"] = w
-                        append_ai_village_dialogue(
-                            "대장간",
-                            f"{w['name']} 무기를 구입하고 즉시 장착했습니다.",
-                        )
                         save_game()
                         st.rerun()
                     else:
@@ -611,10 +562,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         if a not in stats["inventory_armors"]:
                             stats["inventory_armors"].append(a)
                         stats["equipped_armor"] = a
-                        append_ai_village_dialogue(
-                            "대장간",
-                            f"{a['name']} 갑옷을 구입하고 즉시 착용했습니다.",
-                        )
                         save_game()
                         st.rerun()
                     else:
@@ -636,9 +583,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                     stats["hp_potions"][p_price] = (
                         stats["hp_potions"].get(p_price, 0) + 1
                     )
-                    append_ai_village_dialogue(
-                        "포션 상점", f"체력 포션({p_price}G) 구입."
-                    )
                     save_game()
                     st.rerun()
                 else:
@@ -656,9 +600,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                     stats["mp_potions"][p_price] = (
                         stats["mp_potions"].get(p_price, 0) + 1
                     )
-                    append_ai_village_dialogue(
-                        "포션 상점", f"마나 포션({p_price}G) 구입."
-                    )
                     save_game()
                     st.rerun()
                 else:
@@ -671,7 +612,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                 stats["gold"] -= 30
                 stats["hp"] = stats["max_hp"]
                 stats["mp"] = stats["max_mp"]
-                append_ai_village_dialogue("여관", "체력/마나 완전 회복.")
                 save_game()
                 st.rerun()
             else:
@@ -684,7 +624,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
             st.warning(f"진행 중: {q['title']}")
             if st.button("의뢰 포기하기", key="abandon_quest_btn"):
                 stats["active_quest"] = None
-                append_ai_village_dialogue("길드의뢰소", "의뢰 포기.")
                 save_game()
                 st.rerun()
         else:
@@ -692,9 +631,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                 if not q["completed"]:
                     if st.button(f"수주: {q['title']}", key=f"q_{q['id']}"):
                         stats["active_quest"] = q
-                        append_ai_village_dialogue(
-                            "길드의뢰소", f"'{q['title']}' 수주."
-                        )
                         save_game()
                         st.rerun()
 
@@ -711,9 +647,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                     if stats.get("skill_points", 0) > 0:
                         stats["learned_skills"].append(sk)
                         stats["skill_points"] -= 1
-                        append_ai_village_dialogue(
-                            "훈련소", f"스킬 [{sk['name']}] 습득."
-                        )
                         save_game()
                         st.rerun()
                     else:
@@ -735,9 +668,6 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                     if stats["gold"] >= mg["price"]:
                         stats["gold"] -= mg["price"]
                         stats["learned_magic"].append(mg)
-                        append_ai_village_dialogue(
-                            "마법길드", f"마법 [{mg['name']}] 연구 완료."
-                        )
                         save_game()
                         st.rerun()
                     else:
