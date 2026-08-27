@@ -75,7 +75,6 @@ if os.path.exists(SAVE_FILE):
     except Exception:
         pass
 
-# 상점 및 시설 데이터베이스를 session_state로 관리하여 AI가 추가한 항목이 유지되도록 함
 if "weapon_shop" not in st.session_state:
     st.session_state.weapon_shop = saved_data.get(
         "weapon_shop",
@@ -191,17 +190,17 @@ api_key_input = st.sidebar.text_input(
 selected_model = st.sidebar.selectbox(
     "Gemini 모델",
     options=[
-        "gemini-3.1-flash-lite",
-        "gemini-3.2-flash-lite",
-        "gemini-3.3-flash-lite",
-        "gemini-3.4-flash-lite", 
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-2.5-pro",
     ],
     index=0,
 )
 
 stats = st.session_state.stats
 st.sidebar.markdown("---")
-st.sidebar.subheader("🛡️ 능력치 관리")
+st.sidebar.subheader("🛡️ 기본 능력치")
 st.sidebar.metric(label="⭐ 레벨", value=f"Lv. {stats['level']}")
 st.sidebar.metric(
     label="✨ 경험치", value=f"{stats['exp']} / {stats['max_exp']}"
@@ -214,8 +213,47 @@ st.sidebar.write(
     f"- 힘: {stats['str']} | 민첩: {stats['agi']} | 체력: {stats['con']} | 지능: {stats['int']}"
 )
 
+# ⚔️ [업그레이드] 전투력 및 착용 장비, 인벤토리, 스킬/마법 전체 표시 영역
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚔️ 전투력 및 장비 현황")
+current_atk = int(
+    (stats["str"] * 0.8) + stats["equipped_weapon"].get("damage", 0)
+)
+current_def = int(
+    stats["equipped_armor"].get("defense", 0) + (stats["con"] * 0.5)
+)
+st.sidebar.write(f"- **총 공격력**: {current_atk}")
+st.sidebar.write(f"- **총 방어력**: {current_def}")
+st.sidebar.write(f"- **착용 무기**: {stats['equipped_weapon']['name']}")
+st.sidebar.write(f"- **착용 갑옷**: {stats['equipped_armor']['name']}")
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎒 인벤토리 & 보유 기술")
+with st.sidebar.expander("📦 전체 인벤토리 (장비)"):
+    st.markdown("**[무기 목록]**")
+    for w in stats["inventory_weapons"]:
+        st.write(f"- {w['name']} (공격력:{w['damage']})")
+    st.markdown("**[방어구 목록]**")
+    for a in stats["inventory_armors"]:
+        st.write(f"- {a['name']} (방어력:{a['defense']})")
+
+with st.sidebar.expander("🔮 보유 마법 목록"):
+    if stats["learned_magic"]:
+        for mg in stats["learned_magic"]:
+            st.write(f"- {mg['name']} (위력:{mg['damage']}, MP:{mg['mp_cost']})")
+    else:
+        st.write("습득한 마법이 없습니다.")
+
+with st.sidebar.expander("🥋 보유 스킬 목록"):
+    if stats["learned_skills"]:
+        for sk in stats["learned_skills"]:
+            st.write(f"- {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})")
+    else:
+        st.write("습득한 스킬이 없습니다.")
+
 # 스탯 분배 UI
 if stats.get("stat_points", 0) > 0:
+    st.sidebar.markdown("---")
     st.sidebar.success(f"잔여 스탯 포인트: {stats['stat_points']} P")
     col1, col2 = st.sidebar.columns(2)
     if col1.button("💪 힘+1"):
@@ -375,7 +413,6 @@ def call_gemini_turn(user_action):
 if not api_key_input:
     st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
 else:
-    # 전투 모드 (파이썬 엔진 처리)
     if st.session_state.game_mode == "COMBAT":
         enemy = st.session_state.current_enemy
         st.error(f"🚨 **[전투 발생] 야생의 {enemy['name']}이(가) 나타났다!**")
@@ -388,7 +425,6 @@ else:
 
         b_col1, b_col2, b_col3 = st.columns(3)
 
-        # 1. 기본 공격
         if b_col1.button("🗡️ 기본 공격", use_container_width=True):
             base_atk = (stats["str"] * 0.8) + stats["equipped_weapon"][
                 "damage"
@@ -437,7 +473,6 @@ else:
             save_game()
             st.rerun()
 
-        # 2. 스킬 사용
         if stats["learned_skills"] and b_col2.button(
             "⚡ 스킬 사용", use_container_width=True
         ):
@@ -483,7 +518,6 @@ else:
                     else:
                         st.error("마나가 부족합니다!")
 
-        # 3. 마법 사용
         if stats["learned_magic"] and b_col3.button(
             "🔮 마법 사용", use_container_width=True
         ):
@@ -527,7 +561,6 @@ else:
         if st.session_state.history:
             st.info(st.session_state.history[-1].get("narrative", ""))
 
-    # 탐험 모드 (AI 서사 + 파이썬 규칙 기반 동적 아이템 추가 엔진)
     else:
         for h in st.session_state.history:
             with st.chat_message(h["role"]):
@@ -548,7 +581,6 @@ else:
                 if res:
                     narrative_text = res.narrative
 
-                    # 💡 [핵심] AI가 새로운 아이템/마법을 제안한 경우, 파이썬이 공식을 적용하여 상점에 강제 추가
                     if (
                         res.new_item
                         and res.new_item.name
@@ -560,7 +592,6 @@ else:
                         name = item.name
 
                         if t == "weapon":
-                            # 무기 데미지 공식 = 필요힘 * 1.3
                             damage = int(req * 1.3)
                             price = req * 20
                             new_entry = {
@@ -569,15 +600,11 @@ else:
                                 "required_str": req,
                                 "price": price,
                             }
-                            if (
-                                new_entry
-                                not in st.session_state.weapon_shop
-                            ):
+                            if new_entry not in st.session_state.weapon_shop:
                                 st.session_state.weapon_shop.append(new_entry)
                                 narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
 
                         elif t == "armor":
-                            # 방어구 방어력 공식 = 필요체력 * 1.3
                             defense = int(req * 1.3)
                             price = req * 20
                             new_entry = {
@@ -586,15 +613,11 @@ else:
                                 "required_con": req,
                                 "price": price,
                             }
-                            if (
-                                new_entry
-                                not in st.session_state.armor_shop
-                            ):
+                            if new_entry not in st.session_state.armor_shop:
                                 st.session_state.armor_shop.append(new_entry)
                                 narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
 
                         elif t == "magic":
-                            # 마법 데미지 공식 = 소모마나 * 2
                             damage = int(req * 2.0)
                             price = req * 25
                             new_entry = {
@@ -603,15 +626,11 @@ else:
                                 "mp_cost": req,
                                 "price": price,
                             }
-                            if (
-                                new_entry
-                                not in st.session_state.magic_guild
-                            ):
+                            if new_entry not in st.session_state.magic_guild:
                                 st.session_state.magic_guild.append(new_entry)
                                 narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
 
                         elif t == "skill":
-                            # 스킬 데미지 공식 = 소모마나 * 1.5
                             damage = int(req * 1.5)
                             price = req * 25
                             new_entry = {
@@ -620,10 +639,7 @@ else:
                                 "mp_cost": req,
                                 "price": price,
                             }
-                            if (
-                                new_entry
-                                not in st.session_state.combat_dojo
-                            ):
+                            if new_entry not in st.session_state.combat_dojo:
                                 st.session_state.combat_dojo.append(new_entry)
                                 narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
 
@@ -632,7 +648,6 @@ else:
                         "narrative": narrative_text,
                     })
 
-                    # 전투 트리거 발생 시 파이썬이 레벨에 맞춰 적 능력치 자동 스케일링
                     if res.start_combat:
                         st.session_state.game_mode = "COMBAT"
                         lvl = stats["level"]
