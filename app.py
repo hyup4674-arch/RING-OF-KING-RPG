@@ -603,7 +603,7 @@ else:
 
         else:
             # 탐험 서사 출력 및 3가지 방향 선택지
-            for h in st.session_state.history:
+            for h in st.session_state.history[-2:]:
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
 
