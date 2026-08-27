@@ -212,7 +212,6 @@ if "active_quest" not in st.session_state.stats:
 
 if "history" not in st.session_state:
     st.session_state.history = saved_data.get("history", [])
-    # 초기 기록이 없을 경우 첫 기본 안내 추가
     if not st.session_state.history:
         st.session_state.history.append({
             "role": "assistant",
@@ -445,10 +444,10 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
     with tab_shop:
         st.write("장비를 구매하고 강화합니다.")
         st.markdown("**[무기 상점]**")
-        for w in st.session_state.weapon_shop:
+        for i, w in enumerate(st.session_state.weapon_shop):
             if st.button(
                 f"구매: {w['name']} (공격:{w['damage']}, 필요힘:{w['required_str']}, {w['price']}G)",
-                key=f"w_{w['name']}",
+                key=f"w_{w['name']}_{i}",
             ):
                 if stats["gold"] >= w["price"]:
                     if stats["str"] >= w["required_str"]:
@@ -468,10 +467,10 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                     st.error("골드가 부족합니다!")
 
         st.markdown("**[방어구 상점]**")
-        for a in st.session_state.armor_shop:
+        for i, a in enumerate(st.session_state.armor_shop):
             if st.button(
                 f"구매: {a['name']} (방어:{a['defense']}, 필요체력:{a['required_con']}, {a['price']}G)",
-                key=f"a_{a['name']}",
+                key=f"a_{a['name']}_{i}",
             ):
                 if stats["gold"] >= a["price"]:
                     if stats["con"] >= a["required_con"]:
@@ -550,7 +549,7 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
         if stats["active_quest"]:
             q = stats["active_quest"]
             st.warning(f"진행 중: {q['title']}")
-            if st.button("의뢰 포기하기"):
+            if st.button("의뢰 포기하기", key="abandon_quest_btn"):
                 stats["active_quest"] = None
                 append_ai_village_dialogue("길드의뢰소", "의뢰 포기.")
                 save_game()
@@ -570,9 +569,11 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
         st.write("전투훈련소")
         if stats.get("skill_points", 0) > 0:
             st.info(f"스킬 포인트: {stats['skill_points']}P")
-            for sk in st.session_state.combat_dojo:
+            for i, sk in enumerate(st.session_state.combat_dojo):
                 if sk not in stats["learned_skills"]:
-                    if st.button(f"습득: {sk['name']}", key=f"sk_{sk['name']}"):
+                    if st.button(
+                        f"습득: {sk['name']}", key=f"sk_{sk['name']}_{i}"
+                    ):
                         stats["learned_skills"].append(sk)
                         stats["skill_points"] -= 1
                         append_ai_village_dialogue(
@@ -585,10 +586,11 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
 
     with tab_magic:
         st.write("마법길드 연구")
-        for mg in st.session_state.magic_guild:
+        for i, mg in enumerate(st.session_state.magic_guild):
             if mg not in stats["learned_magic"]:
                 if st.button(
-                    f"연구: {mg['name']} ({mg['price']}G)", key=f"mg_{mg['name']}"
+                    f"연구: {mg['name']} ({mg['price']}G)",
+                    key=f"mg_{mg['name']}_{i}",
                 ):
                     if stats["gold"] >= mg["price"]:
                         stats["gold"] -= mg["price"]
@@ -775,25 +777,31 @@ with right_col:
         st.markdown("---")
         st.success(f"잔여 스탯: {stats['stat_points']} P")
         col_s1, col_s2 = st.columns(2)
-        if col_s1.button("💪 힘+1", use_container_width=True):
+        if col_s1.button("💪 힘+1", use_container_width=True, key="stat_str"):
             stats["str"] += 1
             stats["stat_points"] -= 1
             save_game()
             st.rerun()
-        if col_s2.button("⚡ 민첩+1", use_container_width=True):
+        if col_s2.button(
+            "⚡ 민첩+1", use_container_width=True, key="stat_agi"
+        ):
             stats["agi"] += 1
             stats["stat_points"] -= 1
             save_game()
             st.rerun()
         col_s3, col_s4 = st.columns(2)
-        if col_s3.button("❤️ 체력+1", use_container_width=True):
+        if col_s3.button(
+            "❤️ 체력+1", use_container_width=True, key="stat_con"
+        ):
             stats["con"] += 1
             stats["max_hp"] += 3
             stats["hp"] = stats["max_hp"]
             stats["stat_points"] -= 1
             save_game()
             st.rerun()
-        if col_s4.button("🧠 지능+1", use_container_width=True):
+        if col_s4.button(
+            "🧠 지능+1", use_container_width=True, key="stat_int"
+        ):
             stats["int"] += 1
             stats["max_mp"] += 2
             stats["mp"] = stats["max_mp"]
@@ -1075,12 +1083,10 @@ with main_col:
                 st.info(st.session_state.history[-1].get("narrative", ""))
 
         else:
-            # 채팅 히스토리 렌더링 (최근 5개의 AI 메시지 흐름에 맞춰 출력)
             for idx, h in enumerate(st.session_state.history):
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
 
-                    # 마지막 어시스턴트 메시지이고 선택지가 존재할 경우 클릭 버튼 2개 제공
                     if (
                         h["role"] == "assistant"
                         and idx == len(st.session_state.history) - 1
