@@ -702,9 +702,11 @@ else:
         enemy = st.session_state.current_enemy
         st.error(f"🚨 **[전투 발생] 야생의 {enemy['name']}이(가) 나타났다!**")
 
-        c_hp1, c_hp2 = st.columns(2)
+        # 🔄 [수정된 부분: 내 HP, 내 MP, 적 HP를 모두 표시하도록 3열로 분할]
+        c_hp1, c_hp2, c_hp3 = st.columns(3)
         c_hp1.metric("내 HP", f"{stats['hp']} / {stats['max_hp']}")
-        c_hp2.metric(
+        c_hp2.metric("내 MP", f"{stats['mp']} / {stats['max_mp']}")
+        c_hp3.metric(
             f"적 HP ({enemy['name']})", f"{enemy['hp']} / {enemy['max_hp']}"
         )
 
