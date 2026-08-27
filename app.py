@@ -278,8 +278,12 @@ def append_ai_village_dialogue(facility_name, action_desc):
         trim_ai_history()
 
 
-# ⚙️ [좌측 슬라이드 창: 모든 카테고리를 접고 펼칠 수 있는 익스팬더로 구성]
+# ⚙️ [좌측 슬라이드 창 설정]
 st.sidebar.header("⚙️ 게임 설정 및 메뉴")
+
+# 기본값 선언
+api_key_input = DEFAULT_API_KEY
+selected_model = "gemini-3.1-flash-lite"
 
 with st.sidebar.expander("🔑 AI 모델 및 클라우드 세이브", expanded=True):
     api_key_input = st.text_input(
@@ -357,9 +361,6 @@ with st.sidebar.expander("🔑 AI 모델 및 클라우드 세이브", expanded=T
     selected_model = st.selectbox(
         "사용할 Gemini 모델 선택", options=model_options, index=0
     )
-else:
-    api_key_input = DEFAULT_API_KEY
-    selected_model = "gemini-3.1-flash-lite"
 
 stats = st.session_state.stats
 
