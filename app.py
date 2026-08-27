@@ -278,17 +278,18 @@ def append_ai_village_dialogue(facility_name, action_desc):
         trim_ai_history()
 
 
-# ⚙️ [사이드바 설정 및 Flash-Lite 모델 5선 구성]
-st.sidebar.header("⚙️ AI 모델 및 클라우드 세이브")
-api_key_input = st.sidebar.text_input(
-    "Google Gemini API 키", value=DEFAULT_API_KEY, type="password"
-)
+# ⚙️ [좌측 슬라이드 창: 모든 카테고리를 접고 펼칠 수 있는 익스팬더로 구성]
+st.sidebar.header("⚙️ 게임 설정 및 메뉴")
 
-with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 필수)"):
+with st.sidebar.expander("🔑 AI 모델 및 클라우드 세이브", expanded=True):
+    api_key_input = st.text_input(
+        "Google Gemini API 키", value=DEFAULT_API_KEY, type="password"
+    )
+
+    st.markdown("---")
     st.write(
         "클라우드 서버 초기화 방지를 위해 플레이 데이터를 파일로 백업하세요."
     )
-
     save_game()
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
@@ -302,7 +303,6 @@ with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 �
         )
 
     st.markdown("---")
-
     uploaded_file = st.file_uploader(
         "📤 백업했던 세이브 파일 업로드", type=["json"]
     )
@@ -321,75 +321,61 @@ with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 �
         except Exception as e:
             st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
 
-flash_lite_models = [
-    {
-        "id": "gemini-3.1-flash-lite",
-        "name": "Gemini 3.1 Flash-Lite (기본)",
-        "desc": "고효율 멀티모달 저지연 모델",
-    },
-    {
-        "id": "gemini-3.5-flash-lite",
-        "name": "Gemini 3.5 Flash-Lite",
-        "desc": "최신 상위 고성능 Flash-Lite 모델",
-    },
-    {
-        "id": "gemini-2.5-flash-lite",
-        "name": "Gemini 2.5 Flash-Lite",
-        "desc": "안정적인 경제형 경량 모델",
-    },
-    {
-        "id": "gemini-3.1-flash-lite-image",
-        "name": "Gemini 3.1 Flash-Lite Image",
-        "desc": "초저지연 이미지 생성 특화 모델",
-    },
-    {
-        "id": "gemini-2.0-flash-lite",
-        "name": "Gemini 2.0 Flash-Lite",
-        "desc": "초고속 레거시 경량 모델",
-    },
-]
+    st.markdown("---")
+    flash_lite_models = [
+        {
+            "id": "gemini-3.1-flash-lite",
+            "name": "Gemini 3.1 Flash-Lite (기본)",
+            "desc": "고효율 멀티모달 저지연 모델",
+        },
+        {
+            "id": "gemini-3.5-flash-lite",
+            "name": "Gemini 3.5 Flash-Lite",
+            "desc": "최신 상위 고성능 Flash-Lite 모델",
+        },
+        {
+            "id": "gemini-2.5-flash-lite",
+            "name": "Gemini 2.5 Flash-Lite",
+            "desc": "안정적인 경제형 경량 모델",
+        },
+        {
+            "id": "gemini-3.1-flash-lite-image",
+            "name": "Gemini 3.1 Flash-Lite Image",
+            "desc": "초저지연 이미지 생성 특화 모델",
+        },
+        {
+            "id": "gemini-2.0-flash-lite",
+            "name": "Gemini 2.0 Flash-Lite",
+            "desc": "초고속 레거시 경량 모델",
+        },
+    ]
+    st.subheader("🔍 Flash-Lite 모델 라인업 (5선)")
+    for m in flash_lite_models:
+        st.markdown(f"- **{m['name']}**\n  * `{m['id']}` : {m['desc']}")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 Flash-Lite 모델 라인업 (5선)")
-for m in flash_lite_models:
-    st.sidebar.markdown(f"- **{m['name']}**\n  * `{m['id']}` : {m['desc']}")
-
-model_options = [m["id"] for m in flash_lite_models]
-selected_model = st.sidebar.selectbox(
-    "사용할 Gemini 모델 선택", options=model_options, index=0
-)
+    model_options = [m["id"] for m in flash_lite_models]
+    selected_model = st.selectbox(
+        "사용할 Gemini 모델 선택", options=model_options, index=0
+    )
+else:
+    api_key_input = DEFAULT_API_KEY
+    selected_model = "gemini-3.1-flash-lite"
 
 stats = st.session_state.stats
-st.sidebar.markdown("---")
-st.sidebar.subheader("🛡️ 기본 능력치")
-st.sidebar.metric(label="⭐ 레벨", value=f"Lv. {stats['level']}")
-st.sidebar.metric(
-    label="✨ 경험치", value=f"{stats['exp']} / {stats['max_exp']}"
-)
-st.sidebar.metric(label="❤️ 체력", value=f"{stats['hp']} / {stats['max_hp']}")
-st.sidebar.metric(label="💙 마나", value=f"{stats['mp']} / {stats['max_mp']}")
-st.sidebar.metric(label="💰 골드", value=f"{stats['gold']} G")
 
-st.sidebar.write(
-    f"- 힘: {stats['str']} | 민첩: {stats['agi']} | 체력: {stats['con']} | 지능: {stats['int']}"
-)
+with st.sidebar.expander("⚔️ 전투력 및 장비 현황", expanded=True):
+    current_atk = int(
+        (stats["str"] * 0.8) + stats["equipped_weapon"].get("damage", 0)
+    )
+    current_def = int(
+        stats["equipped_armor"].get("defense", 0) + (stats["con"] * 0.5)
+    )
+    st.write(f"- **총 공격력**: {current_atk}")
+    st.write(f"- **총 방어력**: {current_def}")
+    st.write(f"- **착용 무기**: {stats['equipped_weapon']['name']}")
+    st.write(f"- **착용 갑옷**: {stats['equipped_armor']['name']}")
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚔️ 전투력 및 장비 현황")
-current_atk = int(
-    (stats["str"] * 0.8) + stats["equipped_weapon"].get("damage", 0)
-)
-current_def = int(
-    stats["equipped_armor"].get("defense", 0) + (stats["con"] * 0.5)
-)
-st.sidebar.write(f"- **총 공격력**: {current_atk}")
-st.sidebar.write(f"- **총 방어력**: {current_def}")
-st.sidebar.write(f"- **착용 무기**: {stats['equipped_weapon']['name']}")
-st.sidebar.write(f"- **착용 갑옷**: {stats['equipped_armor']['name']}")
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🎒 인벤토리 & 보유 기술")
-with st.sidebar.expander("📦 장비 인벤토리"):
+with st.sidebar.expander("🎒 인벤토리 & 보유 기술", expanded=True):
     st.markdown("**[무기 목록]**")
     for w in stats["inventory_weapons"]:
         st.write(f"- {w['name']} (공격력:{w['damage']})")
@@ -397,7 +383,7 @@ with st.sidebar.expander("📦 장비 인벤토리"):
     for a in stats["inventory_armors"]:
         st.write(f"- {a['name']} (방어력:{a['defense']})")
 
-with st.sidebar.expander("🧪 포션 인벤토리"):
+    st.markdown("---")
     st.markdown("**[체력 포션]**")
     total_hp_p = sum(stats["hp_potions"].values())
     if total_hp_p > 0:
@@ -422,241 +408,184 @@ with st.sidebar.expander("🧪 포션 인벤토리"):
     else:
         st.write("보유 중인 마나 포션이 없습니다.")
 
-with st.sidebar.expander("🔮 보유 마법 및 스킬"):
-    st.markdown("**[마법]**")
+    st.markdown("---")
+    st.markdown("**[마법 및 스킬]**")
+    st.markdown("*마법:*")
     if stats["learned_magic"]:
         for mg in stats["learned_magic"]:
             st.write(f"- {mg['name']} (위력:{mg['damage']}, MP:{mg['mp_cost']})")
     else:
         st.write("습득한 마법 없음")
-    st.markdown("**[스킬]**")
+    st.markdown("*스킬:*")
     if stats["learned_skills"]:
         for sk in stats["learned_skills"]:
             st.write(f"- {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})")
     else:
         st.write("습득한 스킬 없음")
 
-if stats.get("stat_points", 0) > 0:
-    st.sidebar.markdown("---")
-    st.sidebar.success(f"잔여 스탯 포인트: {stats['stat_points']} P")
-    col1, col2 = st.sidebar.columns(2)
-    if col1.button("💪 힘+1"):
-        stats["str"] += 1
-        stats["stat_points"] -= 1
-        save_game()
-        st.rerun()
-    if col2.button("⚡ 민첩+1"):
-        stats["agi"] += 1
-        stats["stat_points"] -= 1
-        save_game()
-        st.rerun()
-    col3, col4 = st.sidebar.columns(2)
-    if col3.button("❤️ 체력+1"):
-        stats["con"] += 1
-        stats["max_hp"] += 3
-        stats["hp"] = stats["max_hp"]
-        stats["stat_points"] -= 1
-        save_game()
-        st.rerun()
-    if col4.button("🧠 지능+1"):
-        stats["int"] += 1
-        stats["max_mp"] += 2
-        stats["mp"] = stats["max_mp"]
-        stats["stat_points"] -= 1
-        save_game()
-        st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("🏘️ 마을 시설 방문")
-tab_shop, tab_potion, tab_inn, tab_quest, tab_dojo, tab_magic = (
-    st.sidebar.tabs(
+with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
+    tab_shop, tab_potion, tab_inn, tab_quest, tab_dojo, tab_magic = st.tabs(
         ["⚔️ 대장간", "🧪 포션상점", "🏨 여관", "📜 길드의뢰소", "🥋 훈련소", "🔮 마법길드"]
     )
-)
 
-with tab_shop:
-    st.write("장비를 구매하고 강화합니다.")
-    st.markdown("**[무기 상점]**")
-    for w in st.session_state.weapon_shop:
-        if st.button(
-            f"구매: {w['name']} (공격력:{w['damage']}, 필요힘:{w['required_str']}, {w['price']}G)",
-            key=f"w_{w['name']}",
-        ):
-            if stats["gold"] >= w["price"]:
-                if stats["str"] >= w["required_str"]:
-                    stats["gold"] -= w["price"]
-                    if w not in stats["inventory_weapons"]:
-                        stats["inventory_weapons"].append(w)
-                    stats["equipped_weapon"] = w
-                    append_ai_village_dialogue(
-                        "대장간",
-                        f"{w['name']} 무기를 구입하고 즉시 장착했습니다.",
-                    )
-                    save_game()
-                    st.rerun()
-                else:
-                    st.error("힘이 부족합니다!")
-            else:
-                st.error("골드가 부족합니다!")
-
-    st.markdown("**[방어구 상점]**")
-    for a in st.session_state.armor_shop:
-        if st.button(
-            f"구매: {a['name']} (방어력:{a['defense']}, 필요체력:{a['required_con']}, {a['price']}G)",
-            key=f"a_{a['name']}",
-        ):
-            if stats["gold"] >= a["price"]:
-                if stats["con"] >= a["required_con"]:
-                    stats["gold"] -= a["price"]
-                    if a not in stats["inventory_armors"]:
-                        stats["inventory_armors"].append(a)
-                    stats["equipped_armor"] = a
-                    append_ai_village_dialogue(
-                        "대장간",
-                        f"{a['name']} 갑옷을 구입하고 즉시 착용했습니다.",
-                    )
-                    save_game()
-                    st.rerun()
-                else:
-                    st.error("체력이 부족합니다!")
-            else:
-                st.error("골드가 부족합니다!")
-
-with tab_potion:
-    st.write("100원 단위로 포션을 구입합니다.")
-    st.write(
-        "💡 **회복 공식**: 체력포션 = 금액 × 1.5 | 마나포션 = 금액 × 2.0"
-    )
-
-    st.markdown("---")
-    st.markdown("**🧪 체력 회복 포션 구입**")
-    hp_tiers = [100, 200, 300, 500]
-    for p_price in hp_tiers:
-        heal_val = int(p_price * 1.5)
-        if st.button(
-            f"체력 포션 ({p_price}G) - 회복량 +{heal_val}", key=f"buy_hp_{p_price}"
-        ):
-            if stats["gold"] >= p_price:
-                stats["gold"] -= p_price
-                stats["hp_potions"][p_price] = (
-                    stats["hp_potions"].get(p_price, 0) + 1
-                )
-                append_ai_village_dialogue(
-                    "포션 상점",
-                    f"{p_price}골드짜리 체력 회복 포션을 구입했습니다.",
-                )
-                save_game()
-                st.rerun()
-            else:
-                st.error("골드가 부족합니다!")
-
-    st.markdown("---")
-    st.markdown("**💙 마나 회복 포션 구입**")
-    mp_tiers = [100, 200, 300, 500]
-    for p_price in mp_tiers:
-        heal_val = int(p_price * 2.0)
-        if st.button(
-            f"마나 포션 ({p_price}G) - 회복량 +{heal_val}", key=f"buy_mp_{p_price}"
-        ):
-            if stats["gold"] >= p_price:
-                stats["gold"] -= p_price
-                stats["mp_potions"][p_price] = (
-                    stats["mp_potions"].get(p_price, 0) + 1
-                )
-                append_ai_village_dialogue(
-                    "포션 상점",
-                    f"{p_price}골드짜리 마나 회복 포션을 구입했습니다.",
-                )
-                save_game()
-                st.rerun()
-            else:
-                st.error("골드가 부족합니다!")
-
-with tab_inn:
-    st.write("여관에서 휴식을 취해 체력과 마나를 전부 회복합니다.")
-    st.info("🏨 **여관 이용료**: 100 골드")
-    if st.button("🛏️ 여관에서 숙박하기 (100G)", use_container_width=True):
-        if stats["gold"] >= 100:
-            stats["gold"] -= 100
-            stats["hp"] = stats["max_hp"]
-            stats["mp"] = stats["max_mp"]
-            append_ai_village_dialogue(
-                "여관",
-                "따뜻한 침대에서 깊은 잠을 자며 체력과 마나를 모두 회복했습니다.",
-            )
-            save_game()
-            st.rerun()
-        else:
-            st.error("골드가 부족합니다! (100G 필요)")
-
-with tab_quest:
-    st.write("길드 의뢰소에서 퀘스트를 수주하고 보상을 획득하세요.")
-    if stats["active_quest"]:
-        q = stats["active_quest"]
-        st.warning(f"📌 **진행 중인 의뢰**: {q['title']}")
-        st.write(f"- 목표 적: `{q['target_enemy']}` 처치")
-        st.write(
-            f"- 보상: {q['reward_gold']}G / {q['reward_exp']} EXP"
-        )
-        if st.button("의뢰 포기하기"):
-            stats["active_quest"] = None
-            append_ai_village_dialogue("길드의뢰소", "진행 중인 의뢰를 포기했습니다.")
-            save_game()
-            st.rerun()
-    else:
-        st.write("수주 가능한 의뢰 목록:")
-        for q in st.session_state.quest_board:
-            if not q["completed"]:
-                if st.button(
-                    f"수주: {q['title']} (보상: {q['reward_gold']}G)",
-                    key=f"q_{q['id']}",
-                ):
-                    stats["active_quest"] = q
-                    append_ai_village_dialogue(
-                        "길드의뢰소",
-                        f"'{q['title']}' 의뢰를 성공적으로 수주했습니다.",
-                    )
-                    save_game()
-                    st.rerun()
-
-with tab_dojo:
-    st.write("스킬 포인트를 소비해 전투 스킬을 배웁니다.")
-    if stats.get("skill_points", 0) > 0:
-        st.info(f"사용 가능한 스킬 포인트: {stats['skill_points']} P")
-        for sk in st.session_state.combat_dojo:
-            if sk not in stats["learned_skills"]:
-                if st.button(
-                    f"습득: {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})",
-                    key=f"sk_{sk['name']}",
-                ):
-                    stats["learned_skills"].append(sk)
-                    stats["skill_points"] -= 1
-                    append_ai_village_dialogue(
-                        "전투훈련소", f"새로운 전투 기술 [{sk['name']}]을 수련했습니다."
-                    )
-                    save_game()
-                    st.rerun()
-    else:
-        st.write("레벨업을 통해 스킬 포인트를 획득하세요.")
-
-with tab_magic:
-    st.write("골드를 지불하고 마법을 연구합니다.")
-    for mg in st.session_state.magic_guild:
-        if mg not in stats["learned_magic"]:
+    with tab_shop:
+        st.write("장비를 구매하고 강화합니다.")
+        st.markdown("**[무기 상점]**")
+        for w in st.session_state.weapon_shop:
             if st.button(
-                f"연구: {mg['name']} (데미지:{mg['damage']}, MP:{mg['mp_cost']}, {mg['price']}G)",
-                key=f"mg_{mg['name']}",
+                f"구매: {w['name']} (공격:{w['damage']}, 필요힘:{w['required_str']}, {w['price']}G)",
+                key=f"w_{w['name']}",
             ):
-                if stats["gold"] >= mg["price"]:
-                    stats["gold"] -= mg["price"]
-                    stats["learned_magic"].append(mg)
-                    append_ai_village_dialogue(
-                        "마법길드", f"신비로운 마법 [{mg['name']}] 연구를 완료했습니다."
-                    )
-                    save_game()
-                    st.rerun()
+                if stats["gold"] >= w["price"]:
+                    if stats["str"] >= w["required_str"]:
+                        stats["gold"] -= w["price"]
+                        if w not in stats["inventory_weapons"]:
+                            stats["inventory_weapons"].append(w)
+                        stats["equipped_weapon"] = w
+                        append_ai_village_dialogue(
+                            "대장간",
+                            f"{w['name']} 무기를 구입하고 즉시 장착했습니다.",
+                        )
+                        save_game()
+                        st.rerun()
+                    else:
+                        st.error("힘이 부족합니다!")
                 else:
                     st.error("골드가 부족합니다!")
+
+        st.markdown("**[방어구 상점]**")
+        for a in st.session_state.armor_shop:
+            if st.button(
+                f"구매: {a['name']} (방어:{a['defense']}, 필요체력:{a['required_con']}, {a['price']}G)",
+                key=f"a_{a['name']}",
+            ):
+                if stats["gold"] >= a["price"]:
+                    if stats["con"] >= a["required_con"]:
+                        stats["gold"] -= a["price"]
+                        if a not in stats["inventory_armors"]:
+                            stats["inventory_armors"].append(a)
+                        stats["equipped_armor"] = a
+                        append_ai_village_dialogue(
+                            "대장간",
+                            f"{a['name']} 갑옷을 구입하고 즉시 착용했습니다.",
+                        )
+                        save_game()
+                        st.rerun()
+                    else:
+                        st.error("체력이 부족합니다!")
+                else:
+                    st.error("골드가 부족합니다!")
+
+    with tab_potion:
+        st.write("포션을 구입합니다.")
+        hp_tiers = [100, 200, 300, 500]
+        st.markdown("**🧪 체력 포션**")
+        for p_price in hp_tiers:
+            heal_val = int(p_price * 1.5)
+            if st.button(
+                f"체력 포션 ({p_price}G) +{heal_val}", key=f"buy_hp_{p_price}"
+            ):
+                if stats["gold"] >= p_price:
+                    stats["gold"] -= p_price
+                    stats["hp_potions"][p_price] = (
+                        stats["hp_potions"].get(p_price, 0) + 1
+                    )
+                    append_ai_village_dialogue(
+                        "포션 상점", f"체력 포션({p_price}G) 구입."
+                    )
+                    save_game()
+                    st.rerun()
+                else:
+                    st.error("골드 부족")
+
+        st.markdown("**💙 마나 포션**")
+        mp_tiers = [100, 200, 300, 500]
+        for p_price in mp_tiers:
+            heal_val = int(p_price * 2.0)
+            if st.button(
+                f"마나 포션 ({p_price}G) +{heal_val}", key=f"buy_mp_{p_price}"
+            ):
+                if stats["gold"] >= p_price:
+                    stats["gold"] -= p_price
+                    stats["mp_potions"][p_price] = (
+                        stats["mp_potions"].get(p_price, 0) + 1
+                    )
+                    append_ai_village_dialogue(
+                        "포션 상점", f"마나 포션({p_price}G) 구입."
+                    )
+                    save_game()
+                    st.rerun()
+                else:
+                    st.error("골드 부족")
+
+    with tab_inn:
+        st.write("여관 (100G) 휴식")
+        if st.button("🛏️ 여관 숙박하기 (100G)", use_container_width=True):
+            if stats["gold"] >= 100:
+                stats["gold"] -= 100
+                stats["hp"] = stats["max_hp"]
+                stats["mp"] = stats["max_mp"]
+                append_ai_village_dialogue("여관", "체력/마나 완전 회복.")
+                save_game()
+                st.rerun()
+            else:
+                st.error("골드 부족 (100G 필요)")
+
+    with tab_quest:
+        st.write("길드 의뢰소")
+        if stats["active_quest"]:
+            q = stats["active_quest"]
+            st.warning(f"진행 중: {q['title']}")
+            if st.button("의뢰 포기하기"):
+                stats["active_quest"] = None
+                append_ai_village_dialogue("길드의뢰소", "의뢰 포기.")
+                save_game()
+                st.rerun()
+        else:
+            for q in st.session_state.quest_board:
+                if not q["completed"]:
+                    if st.button(f"수주: {q['title']}", key=f"q_{q['id']}"):
+                        stats["active_quest"] = q
+                        append_ai_village_dialogue(
+                            "길드의뢰소", f"'{q['title']}' 수주."
+                        )
+                        save_game()
+                        st.rerun()
+
+    with tab_dojo:
+        st.write("전투훈련소")
+        if stats.get("skill_points", 0) > 0:
+            st.info(f"스킬 포인트: {stats['skill_points']}P")
+            for sk in st.session_state.combat_dojo:
+                if sk not in stats["learned_skills"]:
+                    if st.button(f"습득: {sk['name']}", key=f"sk_{sk['name']}"):
+                        stats["learned_skills"].append(sk)
+                        stats["skill_points"] -= 1
+                        append_ai_village_dialogue(
+                            "훈련소", f"스킬 [{sk['name']}] 습득."
+                        )
+                        save_game()
+                        st.rerun()
+        else:
+            st.write("스킬 포인트 부족")
+
+    with tab_magic:
+        st.write("마법길드 연구")
+        for mg in st.session_state.magic_guild:
+            if mg not in stats["learned_magic"]:
+                if st.button(
+                    f"연구: {mg['name']} ({mg['price']}G)", key=f"mg_{mg['name']}"
+                ):
+                    if stats["gold"] >= mg["price"]:
+                        stats["gold"] -= mg["price"]
+                        stats["learned_magic"].append(mg)
+                        append_ai_village_dialogue(
+                            "마법길드", f"마법 [{mg['name']}] 연구 완료."
+                        )
+                        save_game()
+                        st.rerun()
+                    else:
+                        st.error("골드 부족")
 
 
 def call_gemini_turn(user_action):
@@ -695,384 +624,453 @@ def call_gemini_turn(user_action):
         return None
 
 
-if not api_key_input:
-    st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
-else:
-    if st.session_state.game_mode == "COMBAT":
-        enemy = st.session_state.current_enemy
-        st.error(f"🚨 **[전투 발생] 야생의 {enemy['name']}이(가) 나타났다!**")
+# 🖥️ [메인 화면: 메인 콘텐츠 영역과 항상 띄워놓는 우측 슬라이드(기본 능력치) 영역 분할]
+main_col, right_col = st.columns([3, 1])
 
-        # 🔄 [수정된 부분: 내 HP, 내 MP, 적 HP를 모두 표시하도록 3열로 분할]
-        c_hp1, c_hp2, c_hp3 = st.columns(3)
-        c_hp1.metric("내 HP", f"{stats['hp']} / {stats['max_hp']}")
-        c_hp2.metric("내 MP", f"{stats['mp']} / {stats['max_mp']}")
-        c_hp3.metric(
-            f"적 HP ({enemy['name']})", f"{enemy['hp']} / {enemy['max_hp']}"
-        )
+with right_col:
+    st.subheader("🛡️ 기본 능력치")
+    st.metric(label="⭐ 레벨", value=f"Lv. {stats['level']}")
+    st.metric(
+        label="✨ 경험치", value=f"{stats['exp']} / {stats['max_exp']}"
+    )
+    st.metric(label="❤️ 체력", value=f"{stats['hp']} / {stats['max_hp']}")
+    st.metric(label="💙 마나", value=f"{stats['mp']} / {stats['max_mp']}")
+    st.metric(label="💰 골드", value=f"{stats['gold']} G")
 
-        with st.expander("🧪 전투 중 포션 사용하기"):
-            p_col1, p_col2 = st.columns(2)
-            with p_col1:
-                st.markdown("**[체력 포션 사용]**")
-                for p_price, p_count in list(stats["hp_potions"].items()):
-                    if p_count > 0:
-                        heal_val = int(int(p_price) * 1.5)
-                        if st.button(
-                            f"체력 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
-                            key=f"combat_hp_{p_price}",
-                        ):
-                            stats["hp_potions"][p_price] -= 1
-                            stats["hp"] = min(
-                                stats["max_hp"], stats["hp"] + heal_val
-                            )
-                            st.success(
-                                f"체력 포션을 사용하여 HP가 {heal_val} 회복되었습니다!"
-                            )
-                            save_game()
-                            st.rerun()
-                if sum(stats["hp_potions"].values()) == 0:
-                    st.write("체력 포션이 없습니다.")
+    st.markdown("---")
+    st.write(
+        f"- **힘**: {stats['str']}\n- **민첩**: {stats['agi']}\n- **체력**: {stats['con']}\n- **지능**: {stats['int']}"
+    )
 
-            with p_col2:
-                st.markdown("**[마나 포션 사용]**")
-                for p_price, p_count in list(stats["mp_potions"].items()):
-                    if p_count > 0:
-                        heal_val = int(int(p_price) * 2.0)
-                        if st.button(
-                            f"마나 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
-                            key=f"combat_mp_{p_price}",
-                        ):
-                            stats["mp_potions"][p_price] -= 1
-                            stats["mp"] = min(
-                                stats["max_mp"], stats["mp"] + heal_val
-                            )
-                            st.success(
-                                f"마나 포션을 사용하여 MP가 {heal_val} 회복되었습니다!"
-                            )
-                            save_game()
-                            st.rerun()
-                if sum(stats["mp_potions"].values()) == 0:
-                    st.write("마나 포션이 없습니다.")
-
-        b_col1, b_col2, b_col3 = st.columns(3)
-
-        if b_col1.button("🗡️ 기본 공격", use_container_width=True):
-            st.session_state.combat_sub_menu = None
-            base_atk = (stats["str"] * 0.8) + stats["equipped_weapon"][
-                "damage"
-            ]
-            crit = random.random() < (stats["agi"] * 0.005)
-            mult = 1.5 if crit else 1.0
-            p_dmg = max(
-                1, int((base_atk - (enemy["defense"] * 0.3)) * mult)
-            )
-
-            enemy["hp"] -= p_dmg
-            log = f"플레이어의 공격! {'[크리티컬!] ' if crit else ''}{p_dmg}의 데미지를 입혔다."
-
-            if enemy["hp"] <= 0:
-                gold_rew = enemy["level"] * 25
-                exp_rew = enemy["level"] * 40
-
-                if (
-                    stats["active_quest"]
-                    and stats["active_quest"]["target_enemy"] in enemy["name"]
-                ):
-                    gold_rew += stats["active_quest"]["reward_gold"]
-                    exp_rew += stats["active_quest"]["reward_exp"]
-                    log += f"\n📜 **[길드 의뢰 달성!]** 보상(골드+{stats['active_quest']['reward_gold']}, EXP+{stats['active_quest']['reward_exp']}) 추가 획득!"
-                    stats["active_quest"] = None
-
-                stats["gold"] += gold_rew
-                leveled = add_exp(exp_rew)
-                st.session_state.game_mode = "EXPLORATION"
-                st.session_state.current_enemy = None
-                log += f"\n🎉 승리! (보상: {gold_rew}G, {exp_rew} EXP){' [레벨 업!]' if leveled else ''}"
-                st.session_state.history.append(
-                    {"role": "assistant", "narrative": log}
-                )
-                trim_ai_history()
-            else:
-                e_dmg = max(
-                    1,
-                    int(
-                        enemy["atk"]
-                        - (
-                            stats["equipped_armor"]["defense"]
-                            + (stats["con"] * 0.5)
-                        )
-                    ),
-                )
-                stats["hp"] = max(0, stats["hp"] - e_dmg)
-                log += f"\n적의 반격으로 {e_dmg}의 피해를 입었다!"
-                if stats["hp"] <= 0:
-                    stats["hp"] = 20
-                    st.session_state.game_mode = "EXPLORATION"
-                    st.session_state.current_enemy = None
-                    log += "\n💀 전투에서 패배하여 쓰러졌으나 겨우 정신을 차렸다."
-                st.session_state.history.append(
-                    {"role": "assistant", "narrative": log}
-                )
-                trim_ai_history()
+    if stats.get("stat_points", 0) > 0:
+        st.markdown("---")
+        st.success(f"잔여 스탯: {stats['stat_points']} P")
+        col_s1, col_s2 = st.columns(2)
+        if col_s1.button("💪 힘+1", use_container_width=True):
+            stats["str"] += 1
+            stats["stat_points"] -= 1
+            save_game()
+            st.rerun()
+        if col_s2.button("⚡ 민첩+1", use_container_width=True):
+            stats["agi"] += 1
+            stats["stat_points"] -= 1
+            save_game()
+            st.rerun()
+        col_s3, col_s4 = st.columns(2)
+        if col_s3.button("❤️ 체력+1", use_container_width=True):
+            stats["con"] += 1
+            stats["max_hp"] += 3
+            stats["hp"] = stats["max_hp"]
+            stats["stat_points"] -= 1
+            save_game()
+            st.rerun()
+        if col_s4.button("🧠 지능+1", use_container_width=True):
+            stats["int"] += 1
+            stats["max_mp"] += 2
+            stats["mp"] = stats["max_mp"]
+            stats["stat_points"] -= 1
             save_game()
             st.rerun()
 
-        if stats["learned_skills"] and b_col2.button(
-            "⚡ 스킬 선택", use_container_width=True
-        ):
-            st.session_state.combat_sub_menu = (
-                "skill"
-                if st.session_state.combat_sub_menu != "skill"
-                else None
-            )
-            st.rerun()
-
-        if stats["learned_magic"] and b_col3.button(
-            "🔮 마법 선택", use_container_width=True
-        ):
-            st.session_state.combat_sub_menu = (
-                "magic"
-                if st.session_state.combat_sub_menu != "magic"
-                else None
-            )
-            st.rerun()
-
-        # ⚡ [스킬 선택 서브 메뉴 표시]
-        if st.session_state.combat_sub_menu == "skill":
-            st.markdown("---")
-            st.markdown("### ⚡ 사용할 전투 스킬 선택")
-            for sk in stats["learned_skills"]:
-                if st.button(
-                    f"{sk['name']} (위력:{sk['damage']}, 소모MP: {sk['mp_cost']})",
-                    key=f"combat_use_sk_{sk['name']}",
-                ):
-                    if stats["mp"] >= sk["mp_cost"]:
-                        stats["mp"] -= sk["mp_cost"]
-                        skill_dmg = (
-                            (stats["str"] * 0.5)
-                            + sk["damage"]
-                            + (stats["int"] * 0.3)
-                        )
-                        enemy["hp"] -= int(skill_dmg)
-                        log = f"스킬 [{sk['name']}] 발동! {int(skill_dmg)}의 피해를 입혔다."
-
-                        if enemy["hp"] <= 0:
-                            gold_rew = enemy["level"] * 30
-                            exp_rew = enemy["level"] * 50
-
-                            if (
-                                stats["active_quest"]
-                                and stats["active_quest"]["target_enemy"]
-                                in enemy["name"]
-                            ):
-                                gold_rew += stats["active_quest"]["reward_gold"]
-                                exp_rew += stats["active_quest"]["reward_exp"]
-                                log += f"\n📜 **[길드 의뢰 달성!]** 보상 추가 획득!"
-                                stats["active_quest"] = None
-
-                            stats["gold"] += gold_rew
-                            add_exp(exp_rew)
-                            st.session_state.game_mode = "EXPLORATION"
-                            st.session_state.current_enemy = None
-                            log += "\n🎉 적을 격파했습니다!"
-                        else:
-                            e_dmg = max(
-                                1,
-                                int(
-                                    enemy["atk"]
-                                    - stats["equipped_armor"]["defense"]
-                                ),
-                            )
-                            stats["hp"] = max(0, stats["hp"] - e_dmg)
-                            log += f"\n적의 반격! {e_dmg} 피해."
-
-                        st.session_state.combat_sub_menu = None
-                        st.session_state.history.append(
-                            {"role": "assistant", "narrative": log}
-                        )
-                        trim_ai_history()
-                        save_game()
-                        st.rerun()
-                    else:
-                        st.error("마나가 부족합니다!")
-
-        # 🔮 [마법 선택 서브 메뉴 표시]
-        if st.session_state.combat_sub_menu == "magic":
-            st.markdown("---")
-            st.markdown("### 🔮 사용할 마법 선택")
-            for mg in stats["learned_magic"]:
-                if st.button(
-                    f"{mg['name']} (위력:{mg['damage']}, 소모MP: {mg['mp_cost']})",
-                    key=f"combat_use_mg_{mg['name']}",
-                ):
-                    if stats["mp"] >= mg["mp_cost"]:
-                        stats["mp"] -= mg["mp_cost"]
-                        mag_dmg = (stats["int"] * 1.5) + mg["damage"]
-                        enemy["hp"] -= int(mag_dmg)
-                        log = f"마법 [{mg['name']}] 시전! {int(mag_dmg)}의 마법 피해."
-
-                        if enemy["hp"] <= 0:
-                            gold_rew = enemy["level"] * 30
-                            exp_rew = enemy["level"] * 50
-
-                            if (
-                                stats["active_quest"]
-                                and stats["active_quest"]["target_enemy"]
-                                in enemy["name"]
-                            ):
-                                gold_rew += stats["active_quest"]["reward_gold"]
-                                exp_rew += stats["active_quest"]["reward_exp"]
-                                log += f"\n📜 **[길드 의뢰 달성!]** 보상 추가 획득!"
-                                stats["active_quest"] = None
-
-                            stats["gold"] += gold_rew
-                            add_exp(exp_rew)
-                            st.session_state.game_mode = "EXPLORATION"
-                            st.session_state.current_enemy = None
-                            log += "\n🎉 적을 격파했습니다!"
-                        else:
-                            e_dmg = max(
-                                1,
-                                int(
-                                    enemy["atk"]
-                                    - stats["equipped_armor"]["defense"]
-                                ),
-                            )
-                            stats["hp"] = max(0, stats["hp"] - e_dmg)
-                            log += f"\n적의 반격! {e_dmg} 피해."
-
-                        st.session_state.combat_sub_menu = None
-                        st.session_state.history.append(
-                            {"role": "assistant", "narrative": log}
-                        )
-                        trim_ai_history()
-                        save_game()
-                        st.rerun()
-                    else:
-                        st.error("마나가 부족합니다!")
-
-        if st.session_state.history:
-            st.info(st.session_state.history[-1].get("narrative", ""))
-
+with main_col:
+    if not api_key_input:
+        st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
     else:
-        for h in st.session_state.history:
-            with st.chat_message(h["role"]):
-                st.markdown(h.get("narrative", ""))
+        if st.session_state.game_mode == "COMBAT":
+            enemy = st.session_state.current_enemy
+            st.error(f"🚨 **[전투 발생] 야생의 {enemy['name']}이(가) 나타났다!**")
 
-        chat_input = st.chat_input("원하는 행동을 입력하세요... (예: 숲으로 이동한다)")
-
-        if chat_input:
-            st.session_state.history.append(
-                {"role": "user", "narrative": chat_input}
+            c_hp1, c_hp2, c_hp3 = st.columns(3)
+            c_hp1.metric("내 HP", f"{stats['hp']} / {stats['max_hp']}")
+            c_hp2.metric("내 MP", f"{stats['mp']} / {stats['max_mp']}")
+            c_hp3.metric(
+                f"적 HP ({enemy['name']})", f"{enemy['hp']} / {enemy['max_hp']}"
             )
-            with st.chat_message("user"):
-                st.markdown(chat_input)
 
-            with st.spinner("게임 마스터가 서사를 전개하는 중..."):
-                res = call_gemini_turn(chat_input)
+            with st.expander("🧪 전투 중 포션 사용하기"):
+                p_col1, p_col2 = st.columns(2)
+                with p_col1:
+                    st.markdown("**[체력 포션 사용]**")
+                    for p_price, p_count in list(stats["hp_potions"].items()):
+                        if p_count > 0:
+                            heal_val = int(int(p_price) * 1.5)
+                            if st.button(
+                                f"체력 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
+                                key=f"combat_hp_{p_price}",
+                            ):
+                                stats["hp_potions"][p_price] -= 1
+                                stats["hp"] = min(
+                                    stats["max_hp"], stats["hp"] + heal_val
+                                )
+                                st.success(
+                                    f"체력 포션을 사용하여 HP가 {heal_val} 회복되었습니다!"
+                                )
+                                save_game()
+                                st.rerun()
+                    if sum(stats["hp_potions"].values()) == 0:
+                        st.write("체력 포션이 없습니다.")
 
-                if res:
-                    narrative_text = res.narrative
+                with p_col2:
+                    st.markdown("**[마나 포션 사용]**")
+                    for p_price, p_count in list(stats["mp_potions"].items()):
+                        if p_count > 0:
+                            heal_val = int(int(p_price) * 2.0)
+                            if st.button(
+                                f"마나 포션({p_price}G형, +{heal_val}) 사용 (보유:{p_count})",
+                                key=f"combat_mp_{p_price}",
+                            ):
+                                stats["mp_potions"][p_price] -= 1
+                                stats["mp"] = min(
+                                    stats["max_mp"], stats["mp"] + heal_val
+                                )
+                                st.success(
+                                    f"마나 포션을 사용하여 MP가 {heal_val} 회복되었습니다!"
+                                )
+                                save_game()
+                                st.rerun()
+                    if sum(stats["mp_potions"].values()) == 0:
+                        st.write("마나 포션이 없습니다.")
+
+            b_col1, b_col2, b_col3 = st.columns(3)
+
+            if b_col1.button("🗡️ 기본 공격", use_container_width=True):
+                st.session_state.combat_sub_menu = None
+                base_atk = (stats["str"] * 0.8) + stats["equipped_weapon"][
+                    "damage"
+                ]
+                crit = random.random() < (stats["agi"] * 0.005)
+                mult = 1.5 if crit else 1.0
+                p_dmg = max(
+                    1, int((base_atk - (enemy["defense"] * 0.3)) * mult)
+                )
+
+                enemy["hp"] -= p_dmg
+                log = f"플레이어의 공격! {'[크리티컬!] ' if crit else ''}{p_dmg}의 데미지를 입혔다."
+
+                if enemy["hp"] <= 0:
+                    gold_rew = enemy["level"] * 25
+                    exp_rew = enemy["level"] * 40
 
                     if (
-                        res.new_item
-                        and res.new_item.name
-                        and res.new_item.item_type
+                        stats["active_quest"]
+                        and stats["active_quest"]["target_enemy"] in enemy["name"]
                     ):
-                        item = res.new_item
-                        t = item.item_type.lower()
-                        req = item.required_stat
-                        name = item.name
+                        gold_rew += stats["active_quest"]["reward_gold"]
+                        exp_rew += stats["active_quest"]["reward_exp"]
+                        log += f"\n📜 **[길드 의뢰 달성!]** 보상(골드+{stats['active_quest']['reward_gold']}, EXP+{stats['active_quest']['reward_exp']}) 추가 획득!"
+                        stats["active_quest"] = None
 
-                        if t == "weapon":
-                            damage = int(req * 1.3)
-                            price = req * 20
-                            new_entry = {
-                                "name": name,
-                                "damage": damage,
-                                "required_str": req,
-                                "price": price,
-                            }
-                            if new_entry not in st.session_state.weapon_shop:
-                                st.session_state.weapon_shop.append(new_entry)
-                                narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
-
-                        elif t == "armor":
-                            defense = int(req * 1.3)
-                            price = req * 20
-                            new_entry = {
-                                "name": name,
-                                "defense": defense,
-                                "required_con": req,
-                                "price": price,
-                            }
-                            if new_entry not in st.session_state.armor_shop:
-                                st.session_state.armor_shop.append(new_entry)
-                                narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
-
-                        elif t == "magic":
-                            damage = int(req * 2.0)
-                            price = req * 25
-                            new_entry = {
-                                "name": name,
-                                "damage": damage,
-                                "mp_cost": req,
-                                "price": price,
-                            }
-                            if new_entry not in st.session_state.magic_guild:
-                                st.session_state.magic_guild.append(new_entry)
-                                narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
-
-                        elif t == "skill":
-                            damage = int(req * 1.5)
-                            price = req * 25
-                            new_entry = {
-                                "name": name,
-                                "damage": damage,
-                                "mp_cost": req,
-                                "price": price,
-                            }
-                            if new_entry not in st.session_state.combat_dojo:
-                                st.session_state.combat_dojo.append(new_entry)
-                                narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
-
-                    st.session_state.history.append({
-                        "role": "assistant",
-                        "narrative": narrative_text,
-                    })
+                    stats["gold"] += gold_rew
+                    leveled = add_exp(exp_rew)
+                    st.session_state.game_mode = "EXPLORATION"
+                    st.session_state.current_enemy = None
+                    log += f"\n🎉 승리! (보상: {gold_rew}G, {exp_rew} EXP){' [레벨 업!]' if leveled else ''}"
+                    st.session_state.history.append(
+                        {"role": "assistant", "narrative": log}
+                    )
                     trim_ai_history()
+                else:
+                    e_dmg = max(
+                        1,
+                        int(
+                            enemy["atk"]
+                            - (
+                                stats["equipped_armor"]["defense"]
+                                + (stats["con"] * 0.5)
+                            )
+                        ),
+                    )
+                    stats["hp"] = max(0, stats["hp"] - e_dmg)
+                    log += f"\n적의 반격으로 {e_dmg}의 피해를 입었다!"
+                    if stats["hp"] <= 0:
+                        stats["hp"] = 20
+                        st.session_state.game_mode = "EXPLORATION"
+                        st.session_state.current_enemy = None
+                        log += "\n💀 전투에서 패배하여 쓰러졌으나 겨우 정신을 차렸다."
+                    st.session_state.history.append(
+                        {"role": "assistant", "narrative": log}
+                    )
+                    trim_ai_history()
+                save_game()
+                st.rerun()
 
-                    if res.start_combat:
-                        st.session_state.game_mode = "COMBAT"
-                        st.session_state.combat_sub_menu = None
-                        lvl = stats["level"]
-                        archetype = res.enemy_archetype
-                        hp_scale = 50 + (lvl * 25)
-                        atk_scale = 12 + (lvl * 4)
-                        def_scale = 5 + (lvl * 2)
+            if stats["learned_skills"] and b_col2.button(
+                "⚡ 스킬 선택", use_container_width=True
+            ):
+                st.session_state.combat_sub_menu = (
+                    "skill"
+                    if st.session_state.combat_sub_menu != "skill"
+                    else None
+                )
+                st.rerun()
 
-                        if archetype == "mage":
-                            atk_scale *= 1.3
-                            hp_scale *= 0.8
-                        elif archetype == "undead":
-                            def_scale *= 1.5
+            if stats["learned_magic"] and b_col3.button(
+                "🔮 마법 선택", use_container_width=True
+            ):
+                st.session_state.combat_sub_menu = (
+                    "magic"
+                    if st.session_state.combat_sub_menu != "magic"
+                    else None
+                )
+                st.rerun()
 
-                        enemy_name = res.enemy_name or "야생의 괴물"
+            if st.session_state.combat_sub_menu == "skill":
+                st.markdown("---")
+                st.markdown("### ⚡ 사용할 전투 스킬 선택")
+                for sk in stats["learned_skills"]:
+                    if st.button(
+                        f"{sk['name']} (위력:{sk['damage']}, 소모MP: {sk['mp_cost']})",
+                        key=f"combat_use_sk_{sk['name']}",
+                    ):
+                        if stats["mp"] >= sk["mp_cost"]:
+                            stats["mp"] -= sk["mp_cost"]
+                            skill_dmg = (
+                                (stats["str"] * 0.5)
+                                + sk["damage"]
+                                + (stats["int"] * 0.3)
+                            )
+                            enemy["hp"] -= int(skill_dmg)
+                            log = f"스킬 [{sk['name']}] 발동! {int(skill_dmg)}의 피해를 입혔다."
+
+                            if enemy["hp"] <= 0:
+                                gold_rew = enemy["level"] * 30
+                                exp_rew = enemy["level"] * 50
+
+                                if (
+                                    stats["active_quest"]
+                                    and stats["active_quest"]["target_enemy"]
+                                    in enemy["name"]
+                                ):
+                                    gold_rew += stats["active_quest"][
+                                        "reward_gold"
+                                    ]
+                                    exp_rew += stats["active_quest"][
+                                        "reward_exp"
+                                    ]
+                                    log += f"\n📜 **[길드 의뢰 달성!]** 보상 추가 획득!"
+                                    stats["active_quest"] = None
+
+                                stats["gold"] += gold_rew
+                                add_exp(exp_rew)
+                                st.session_state.game_mode = "EXPLORATION"
+                                st.session_state.current_enemy = None
+                                log += "\n🎉 적을 격파했습니다!"
+                            else:
+                                e_dmg = max(
+                                    1,
+                                    int(
+                                        enemy["atk"]
+                                        - stats["equipped_armor"]["defense"]
+                                    ),
+                                )
+                                stats["hp"] = max(0, stats["hp"] - e_dmg)
+                                log += f"\n적의 반격! {e_dmg} 피해."
+
+                            st.session_state.combat_sub_menu = None
+                            st.session_state.history.append(
+                                {"role": "assistant", "narrative": log}
+                            )
+                            trim_ai_history()
+                            save_game()
+                            st.rerun()
+                        else:
+                            st.error("마나가 부족합니다!")
+
+            if st.session_state.combat_sub_menu == "magic":
+                st.markdown("---")
+                st.markdown("### 🔮 사용할 마법 선택")
+                for mg in stats["learned_magic"]:
+                    if st.button(
+                        f"{mg['name']} (위력:{mg['damage']}, 소모MP: {mg['mp_cost']})",
+                        key=f"combat_use_mg_{mg['name']}",
+                    ):
+                        if stats["mp"] >= mg["mp_cost"]:
+                            stats["mp"] -= mg["mp_cost"]
+                            mag_dmg = (stats["int"] * 1.5) + mg["damage"]
+                            enemy["hp"] -= int(mag_dmg)
+                            log = f"마법 [{mg['name']}] 시전! {int(mag_dmg)}의 마법 피해."
+
+                            if enemy["hp"] <= 0:
+                                gold_rew = enemy["level"] * 30
+                                exp_rew = enemy["level"] * 50
+
+                                if (
+                                    stats["active_quest"]
+                                    and stats["active_quest"]["target_enemy"]
+                                    in enemy["name"]
+                                ):
+                                    gold_rew += stats["active_quest"][
+                                        "reward_gold"
+                                    ]
+                                    exp_rew += stats["active_quest"][
+                                        "reward_exp"
+                                    ]
+                                    log += f"\n📜 **[길드 의뢰 달성!]** 보상 추가 획득!"
+                                    stats["active_quest"] = None
+
+                                stats["gold"] += gold_rew
+                                add_exp(exp_rew)
+                                st.session_state.game_mode = "EXPLORATION"
+                                st.session_state.current_enemy = None
+                                log += "\n🎉 적을 격파했습니다!"
+                            else:
+                                e_dmg = max(
+                                    1,
+                                    int(
+                                        enemy["atk"]
+                                        - stats["equipped_armor"]["defense"]
+                                    ),
+                                )
+                                stats["hp"] = max(0, stats["hp"] - e_dmg)
+                                log += f"\n적의 반격! {e_dmg} 피해."
+
+                            st.session_state.combat_sub_menu = None
+                            st.session_state.history.append(
+                                {"role": "assistant", "narrative": log}
+                            )
+                            trim_ai_history()
+                            save_game()
+                            st.rerun()
+                        else:
+                            st.error("마나가 부족합니다!")
+
+            if st.session_state.history:
+                st.info(st.session_state.history[-1].get("narrative", ""))
+
+        else:
+            for h in st.session_state.history:
+                with st.chat_message(h["role"]):
+                    st.markdown(h.get("narrative", ""))
+
+            chat_input = st.chat_input(
+                "원하는 행동을 입력하세요... (예: 숲으로 이동한다)"
+            )
+
+            if chat_input:
+                st.session_state.history.append(
+                    {"role": "user", "narrative": chat_input}
+                )
+                with st.chat_message("user"):
+                    st.markdown(chat_input)
+
+                with st.spinner("게임 마스터가 서사를 전개하는 중..."):
+                    res = call_gemini_turn(chat_input)
+
+                    if res:
+                        narrative_text = res.narrative
+
                         if (
-                            stats["active_quest"]
-                            and stats["active_quest"]["target_enemy"]
-                            in enemy_name
+                            res.new_item
+                            and res.new_item.name
+                            and res.new_item.item_type
                         ):
-                            enemy_name = stats["active_quest"]["target_enemy"]
+                            item = res.new_item
+                            t = item.item_type.lower()
+                            req = item.required_stat
+                            name = item.name
 
-                        st.session_state.current_enemy = {
-                            "name": enemy_name,
-                            "level": lvl,
-                            "hp": int(hp_scale),
-                            "max_hp": int(hp_scale),
-                            "atk": int(atk_scale),
-                            "defense": int(def_scale),
-                        }
+                            if t == "weapon":
+                                damage = int(req * 1.3)
+                                price = req * 20
+                                new_entry = {
+                                    "name": name,
+                                    "damage": damage,
+                                    "required_str": req,
+                                    "price": price,
+                                }
+                                if (
+                                    new_entry
+                                    not in st.session_state.weapon_shop
+                                ):
+                                    st.session_state.weapon_shop.append(
+                                        new_entry
+                                    )
+                                    narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
 
-                    save_game()
-                    st.rerun()
+                            elif t == "armor":
+                                defense = int(req * 1.3)
+                                price = req * 20
+                                new_entry = {
+                                    "name": name,
+                                    "defense": defense,
+                                    "required_con": req,
+                                    "price": price,
+                                }
+                                if new_entry not in st.session_state.armor_shop:
+                                    st.session_state.armor_shop.append(
+                                        new_entry
+                                    )
+                                    narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
+
+                            elif t == "magic":
+                                damage = int(req * 2.0)
+                                price = req * 25
+                                new_entry = {
+                                    "name": name,
+                                    "damage": damage,
+                                    "mp_cost": req,
+                                    "price": price,
+                                }
+                                if new_entry not in st.session_state.magic_guild:
+                                    st.session_state.magic_guild.append(
+                                        new_entry
+                                    )
+                                    narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
+
+                            elif t == "skill":
+                                damage = int(req * 1.5)
+                                price = req * 25
+                                new_entry = {
+                                    "name": name,
+                                    "damage": damage,
+                                    "mp_cost": req,
+                                    "price": price,
+                                }
+                                if new_entry not in st.session_state.combat_dojo:
+                                    st.session_state.combat_dojo.append(
+                                        new_entry
+                                    )
+                                    narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
+
+                        st.session_state.history.append({
+                            "role": "assistant",
+                            "narrative": narrative_text,
+                        })
+                        trim_ai_history()
+
+                        if res.start_combat:
+                            st.session_state.game_mode = "COMBAT"
+                            st.session_state.combat_sub_menu = None
+                            lvl = stats["level"]
+                            archetype = res.enemy_archetype
+                            hp_scale = 50 + (lvl * 25)
+                            atk_scale = 12 + (lvl * 4)
+                            def_scale = 5 + (lvl * 2)
+
+                            if archetype == "mage":
+                                atk_scale *= 1.3
+                                hp_scale *= 0.8
+                            elif archetype == "undead":
+                                def_scale *= 1.5
+
+                            enemy_name = res.enemy_name or "야생의 괴물"
+                            if (
+                                stats["active_quest"]
+                                and stats["active_quest"]["target_enemy"]
+                                in enemy_name
+                            ):
+                                enemy_name = stats["active_quest"][
+                                    "target_enemy"
+                                ]
+
+                            st.session_state.current_enemy = {
+                                "name": enemy_name,
+                                "level": lvl,
+                                "hp": int(hp_scale),
+                                "max_hp": int(hp_scale),
+                                "atk": int(atk_scale),
+                                "defense": int(def_scale),
+                            }
+
+                        save_game()
+                        st.rerun()
