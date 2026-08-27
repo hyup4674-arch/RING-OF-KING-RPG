@@ -13,8 +13,9 @@ SAVE_FILE = "rpg_save_v10.json"
 
 st.set_page_config(page_title="RPG Game Engine", page_icon="⚔️", layout="wide")
 
-# ⏱️ 1초마다 화면 갱신 (자동 전투 및 3초 주기 자동 회복 진행용)
-st_autorefresh(interval=1000, limit=None, key="game_loop_counter")
+# ⏱️ 전투 중일 때만 1초(1000ms), 탐험/기타 모드일 때는 3초(3000ms)로 주기 변경
+refresh_interval = 1000 if st.session_state.get("game_mode") == "COMBAT" else 3000
+st_autorefresh(interval=refresh_interval, limit=None, key="game_loop_counter")
 
 
 # 📋 [Pydantic 스키마]
@@ -315,8 +316,7 @@ def process_auto_combat():
         enemy["frozen_turns"] -= 1
         if random.random() < 0.30:
             combat_log.append(
-                "❄️ 적의 몸이 얼어붙어 다음 1턴 동안 근접 공격이"
-                " 빗나갔습니다!"
+                "❄️ 적의 몸이 얼어붙어 다음 1턴 동안 근접 공격이 빗나갔습니다!"
             )
             st.session_state.combat_log = combat_log
             return
@@ -324,8 +324,7 @@ def process_auto_combat():
     e_dmg = enemy["atk"]
     if player["job"] == "전사" and random.random() < 0.20:
         combat_log.append(
-            "🛡️ [전사 패시브] 방패 블럭 성공! 적의 공격을 완벽히"
-            " 막았습니다."
+            "🛡️ [전사 패시브] 방패 블럭 성공! 적의 공격을 완벽히 막았습니다."
         )
         e_dmg = 0
     elif player["job"] == "궁수" and random.random() < 0.20:
@@ -609,6 +608,50 @@ else:
                     st.markdown(h.get("narrative", ""))
 
             last_turn = st.session_state.history[-1]
+
+            # 💡 [추가] 사용자의 행동을 처리하는 공통 함수
+            def handle_user_action(action_text, difficulty=None):
+                if not st.session_state.get("api_key"):
+                    st.error("⚠️ 사이드바에 Gemini API Key를 먼저 입력해주세요!")
+                    return
+
+                # 버튼 클릭인 경우 난이도 텍스트 추가
+                prompt_text = f"{action_text} (선택한 경로 난이도: {difficulty})" if difficulty else action_text
+                
+                res = call_gemini_turn(prompt_text)
+                
+                if res:
+                    narrative = res.narrative
+                    if difficulty:
+                        narrative += f"\n\n[선택한 경로 난이도: {difficulty}]"
+
+                    if res.start_combat:
+                        st.session_state.game_mode = "COMBAT"
+                        scale = {"하 (쉬움)": 0.7, "중 (보통)": 1.0, "상 (매우 어려움)": 1.5}.get(difficulty, 1.0)
+                        st.session_state.current_enemy = {
+                            "name": (res.enemy_name or "던전 괴물"),
+                            "hp": int(80 * scale),
+                            "max_hp": int(80 * scale),
+                            "atk": int(15 * scale),
+                        }
+
+                    st.session_state.history.append({
+                        "role": "assistant",
+                        "narrative": narrative,
+                        "choices": (
+                            res.choices if len(res.choices) == 3 else [
+                                "1번 경로로 전진한다",
+                                "2번 경로로 전진한다",
+                                "3번 경로로 전진한다",
+                            ]
+                        ),
+                    })
+                    save_game()
+                    st.rerun()
+
+            # 💡 [수정] 턴(Turn) 수를 기반으로 고유한 Key 생성
+            current_turn = len(st.session_state.history)
+
             if "choices" in last_turn and last_turn["choices"]:
                 st.markdown("---")
                 st.write("🧭 **3가지 방향 중 어디로 가시겠습니까?**")
@@ -617,62 +660,13 @@ else:
 
                 for idx, col in enumerate([c1, c2, c3]):
                     if idx < len(choices):
-                        if col.button(
-                            f"방향 {idx+1}: {choices[idx]}", key=f"btn_{idx}"
-                        ):
-                            if not st.session_state.get("api_key"):
-                                st.error(
-                                    "⚠️ 사이드바에 Gemini API Key를 먼저"
-                                    " 입력해주세요!"
-                                )
-                            else:
-                                difficulties = [
-                                    "하 (쉬움)",
-                                    "중 (보통)",
-                                    "상 (매우 어려움)",
-                                ]
-                                random.shuffle(difficulties)
-                                chosen_diff = difficulties[idx]
-
-                                res = call_gemini_turn(
-                                    f"{choices[idx]} (선택한 경로 난이도:"
-                                    f" {chosen_diff})"
-                                )
-                                if res:
-                                    narrative = res.narrative
-                                    narrative += (
-                                        "\n\n[선택한 경로 난이도:"
-                                        f" {chosen_diff}]"
-                                    )
-
-                                    if res.start_combat:
-                                        st.session_state.game_mode = "COMBAT"
-                                        scale = {
-                                            "하 (쉬움)": 0.7,
-                                            "중 (보통)": 1.0,
-                                            "상 (매우 어려움)": 1.5,
-                                        }[chosen_diff]
-                                        st.session_state.current_enemy = {
-                                            "name": (
-                                                res.enemy_name or "던전 괴물"
-                                            ),
-                                            "hp": int(80 * scale),
-                                            "max_hp": int(80 * scale),
-                                            "atk": int(15 * scale),
-                                        }
-
-                                    st.session_state.history.append({
-                                        "role": "assistant",
-                                        "narrative": narrative,
-                                        "choices": (
-                                            res.choices
-                                            if len(res.choices) == 3
-                                            else [
-                                                "1번 경로로 전진한다",
-                                                "2번 경로로 전진한다",
-                                                "3번 경로로 전진한다",
-                                            ]
-                                        ),
-                                    })
-                                    save_game()
-                                    st.rerun()
+                        # 💡 [수정] key에 current_turn을 포함하여 중복 방지
+                        if col.button(f"방향 {idx+1}: {choices[idx]}", key=f"btn_{current_turn}_{idx}"):
+                            difficulties = ["하 (쉬움)", "중 (보통)", "상 (매우 어려움)"]
+                            random.shuffle(difficulties)
+                            handle_user_action(choices[idx], difficulty=difficulties[idx])
+            
+            # 💡 [추가] 자유 텍스트 입력창 (st.chat_input 활용)
+            user_input = st.chat_input("원하는 행동을 직접 입력하세요 (예: 횃불을 켜고 조심스럽게 전진한다)")
+            if user_input:
+                handle_user_action(user_input)
