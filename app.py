@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import time
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -13,7 +14,7 @@ st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
 st.title(
-    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (선택지 & 2개 메시지 제한 버전)"
+    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (초고속 간결화 & 2개 메시지 제한 버전)"
 )
 
 
@@ -28,7 +29,7 @@ class GeneratedItem(BaseModel):
 
 
 class GameResponse(BaseModel):
-    narrative: str = Field(description="스토리 서사 묘사.")
+    narrative: str = Field(description="1~2문장으로 매우 간결하게 요약된 스토리 서사 묘사.")
     choices: list[str] = Field(
         default=["주변을 탐색한다", "안전한 곳으로 이동한다"],
         description="플레이어가 선택할 수 있는 정확히 2개의 선택지 리스트",
@@ -251,7 +252,7 @@ def add_exp(amount):
     return leveled_up
 
 
-# 🤖 [AI 대사 생성 함수]
+# 🤖 [AI 대사 생성 함수 (간결화 조건 적용 + 503 재시도 로직)]
 def append_ai_village_dialogue(facility_name, action_desc):
     api_key = api_key_input
     if not api_key:
@@ -264,31 +265,34 @@ def append_ai_village_dialogue(facility_name, action_desc):
         return
 
     client = genai.Client(api_key=api_key)
-    prompt = f"판타지 RPG의 마을 시설인 '{facility_name}'에서 플레이어가 다음 행동을 수행했습니다: '{action_desc}'. NPC의 친절하거나 개성 있는 대사와 현장감을 살린 짧은 서사를 2~3문장으로 묘사해주세요."
-    try:
-        response = client.models.generate_content(
-            model=selected_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(temperature=0.7),
-        )
-        narrative = (
-            response.text.strip()
-            if response.text
-            else f"'{facility_name}'에서의 볼일을 마쳤습니다."
-        )
-        st.session_state.history.append({
-            "role": "assistant",
-            "narrative": f"🏛️ **[{facility_name}]**\n{narrative}",
-            "choices": ["모험을 계속한다", "마을에 머문다"],
-        })
-        trim_ai_history()
-    except Exception:
-        st.session_state.history.append({
-            "role": "assistant",
-            "narrative": f"🏛️ **[{facility_name}]** {action_desc}",
-            "choices": ["모험을 계속한다", "마을에 머문다"],
-        })
-        trim_ai_history()
+    prompt = (
+        f"판타지 RPG의 마을 시설인 '{facility_name}'에서 플레이어가 다음 행동을 수행했습니다: '{action_desc}'. "
+        f"NPC의 개성 있는 대사와 현장감을 살린 서사를 **반드시 1~2문장 이내로 매우 간결하게** 묘사해주세요."
+    )
+    
+    response_text = None
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model=selected_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(temperature=0.7),
+            )
+            response_text = response.text.strip() if response.text else None
+            break
+        except Exception:
+            if attempt < 2:
+                time.sleep(2) # 503 에러 발생 시 2초 대기 후 재시도
+            else:
+                pass
+
+    narrative = response_text if response_text else f"'{facility_name}'에서의 볼일을 마쳤습니다."
+    st.session_state.history.append({
+        "role": "assistant",
+        "narrative": f"🏛️ **[{facility_name}]**\n{narrative}",
+        "choices": ["모험을 계속한다", "마을에 머문다"],
+    })
+    trim_ai_history()
 
 
 # ⚙️ [좌측 슬라이드 창 설정]
@@ -614,16 +618,21 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
             st.markdown("---")
 
 
+# 🤖 [AI 턴 생성 함수: 시스템 지침에 간결화 조건 추가 및 503 자동 재시도 적용]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
+    
+    # 💡 시스템 지침에 1~2문장 제약 추가
     system_instruction = (
         "당신은 판타지 RPG의 게임 마스터(GM)입니다.\n"
-        "플레이어의 탐험 행동에 따른 흥미진진한 서사를 묘사하세요.\n"
+        "모든 서사(narrative)는 반드시 1~2문장으로 매우 간결하고 핵심만 담아 작성하세요.\n"
+        "플레이어의 탐험 행동에 따른 흥미진진한 상황을 빠르게 묘사하세요.\n"
         "반드시 플레이어가 다음에 선택할 수 있는 2개의 선택지(choices)를 문자열 리스트로 함께 제공하세요.\n"
         "전투가 필요하면 start_combat을 True로 설정하고 적 정보와 유형(beast, bandit, undead, mage)을 지정하세요.\n"
         "만약 플레이어가 현재 길드 의뢰(active_quest)와 관련된 적과 싸우거나 처치하도록 유도하는 상황이라면 적 이름을 퀘스트 목표에 맞게 설정해주세요.\n"
         "모험 도중 특별한 보물이나 유물, 전설적인 무기/방어구/마법/스킬을 발견하게 된다면 `new_item` 필드를 통해 새롭게 추가할 장비나 마법 정보를 제안해주세요."
     )
+    
     prompt = (
         f"[플레이어 상태]\n"
         f"- 레벨: {stats['level']} | HP: {stats['hp']}/{stats['max_hp']} | MP: {stats['mp']}/{stats['max_mp']}\n"
@@ -634,27 +643,32 @@ def call_gemini_turn(user_action):
         + f"\n\n플레이어의 행동: {user_action}"
     )
 
-    try:
-        response = client.models.generate_content(
-            model=selected_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=GameResponse,
-                temperature=0.7,
-            ),
-        )
-        return GameResponse.model_validate_json(response.text)
-    except Exception as e:
-        st.error(f"Gemini API 오류: {e}")
-        return None
+    # 💡 503 오류 대비 자동 재시도 로직 (최대 3회)
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model=selected_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=GameResponse,
+                    temperature=0.7,
+                ),
+            )
+            return GameResponse.model_validate_json(response.text)
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2) # 503 혹은 일시적 과부하 시 2초 대기 후 재시도
+            else:
+                st.error(f"Gemini API 오류 발생 (잠시 후 다시 시도해주세요): {e}")
+                return None
 
 
 def process_user_action(user_action):
     st.session_state.history.append({"role": "user", "narrative": user_action})
 
-    with st.spinner("게임 마스터가 서사를 전개하는 중..."):
+    with st.spinner("게임 마스터가 서사를 간결하게 전개하는 중..."):
         res = call_gemini_turn(user_action)
 
         if res:
@@ -765,7 +779,7 @@ def process_user_action(user_action):
             st.rerun()
 
 
-# 🖥️ [메인 화면: 메인 콘텐츠 영역과 항상 띄워놓는 우측 슬라이드(기본 능력치) 영역 분할]
+# 🖥️ [메인 화면 영역]
 main_col, right_col = st.columns([3, 1])
 
 with right_col:
