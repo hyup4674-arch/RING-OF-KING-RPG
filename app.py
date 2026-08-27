@@ -12,7 +12,9 @@ SAVE_FILE = "rpg_save_v5.json"
 st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
-st.title("⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (포션/여관/의뢰소 확장 버전)")
+st.title(
+    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (클라우드 백업/복구 지원 버전)"
+)
 
 
 # 📋 [Pydantic 스키마: AI가 서사, 적 정보, 그리고 새로운 아이템/마법/스킬을 제안 가능]
@@ -168,10 +170,8 @@ if "stats" not in st.session_state:
             "int": 10,
             "stat_points": 10,
             "skill_points": 0,
-            "hp_potions": {
-                100: 2
-            },  # 가격: 개수 (예: 100골드짜리 포션 2개 소유)
-            "mp_potions": {100: 1},  # 가격: 개수
+            "hp_potions": {100: 2},
+            "mp_potions": {100: 1},
             "equipped_weapon": st.session_state.weapon_shop[0],
             "equipped_armor": st.session_state.armor_shop[0],
             "inventory_weapons": [st.session_state.weapon_shop[0]],
@@ -182,7 +182,6 @@ if "stats" not in st.session_state:
         },
     )
 
-# 하위 호환성 보장 (기존 세이브 파일에 포션/퀘스트 키가 없을 경우)
 if "hp_potions" not in st.session_state.stats:
     st.session_state.stats["hp_potions"] = {100: 1}
 if "mp_potions" not in st.session_state.stats:
@@ -219,7 +218,7 @@ def add_exp(amount):
     return leveled_up
 
 
-# 🤖 [AI 대사 생성 함수 - 마을 시설 및 이벤트용]
+# 🤖 [AI 대사 생성 함수]
 def append_ai_village_dialogue(facility_name, action_desc):
     api_key = api_key_input
     if not api_key:
@@ -257,10 +256,50 @@ def append_ai_village_dialogue(facility_name, action_desc):
 
 
 # ⚙️ [사이드바 설정 및 Flash-Lite 모델 5선 구성]
-st.sidebar.header("⚙️ AI 모델 및 캐릭터 상태")
+st.sidebar.header("⚙️ AI 모델 및 클라우드 세이브")
 api_key_input = st.sidebar.text_input(
     "Google Gemini API 키", value=DEFAULT_API_KEY, type="password"
 )
+
+# 💾 [신규 기능] 세이브 파일 백업 및 복구 섹션
+with st.sidebar.expander("💾 세이브 파일 백업 / 복구 (클라우드 필수)"):
+    st.write(
+        "클라우드 서버 초기화 방지를 위해 플레이 데이터를 파일로 백업하세요."
+    )
+
+    # 1. 다운로드 버튼
+    save_game()
+    if os.path.exists(SAVE_FILE):
+        with open(SAVE_FILE, "r", encoding="utf-8") as f:
+            save_data_str = f.read()
+        st.download_button(
+            label="📥 내 기기로 세이브 파일 백업",
+            data=save_data_str,
+            file_name="rpg_save_v5.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+    st.markdown("---")
+
+    # 2. 업로드 버튼 (복구)
+    uploaded_file = st.file_uploader(
+        "📤 백업했던 세이브 파일 업로드", type=["json"]
+    )
+    if uploaded_file is not None:
+        try:
+            content = json.load(uploaded_file)
+            if isinstance(content, dict):
+                with open(SAVE_FILE, "w", encoding="utf-8") as f:
+                    json.dump(content, f, ensure_ascii=False)
+                st.success(
+                    "세이브 데이터가 성공적으로 복구되었습니다! 앱을 재시작합니다..."
+                )
+                st.rerun()
+            else:
+                st.error("올바르지 않은 세이브 파일 형식입니다.")
+        except Exception as e:
+            st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
 
 # Flash-Lite 계열/상위 변형 모델 5선 정의
 flash_lite_models = [
@@ -654,12 +693,10 @@ else:
             f"적 HP ({enemy['name']})", f"{enemy['hp']} / {enemy['max_hp']}"
         )
 
-        # 포션 사용 UI 추가 (전투 중 사용 가능)
         with st.expander("🧪 전투 중 포션 사용하기"):
             p_col1, p_col2 = st.columns(2)
             with p_col1:
                 st.markdown("**[체력 포션 사용]**")
-                hp_used = False
                 for p_price, p_count in list(stats["hp_potions"].items()):
                     if p_count > 0:
                         heal_val = int(p_price * 1.5)
@@ -719,7 +756,6 @@ else:
                 gold_rew = enemy["level"] * 25
                 exp_rew = enemy["level"] * 40
 
-                # 퀘스트 완료 체크
                 if (
                     stats["active_quest"]
                     and stats["active_quest"]["target_enemy"] in enemy["name"]
@@ -764,7 +800,6 @@ else:
         if stats["learned_skills"] and b_col2.button(
             "⚡ 스킬 사용", use_container_width=True
         ):
-            st.write("사용할 스킬을 선택하세요:")
             for sk in stats["learned_skills"]:
                 if st.button(
                     f"{sk['name']} (소모MP: {sk['mp_cost']})",
@@ -972,16 +1007,13 @@ else:
                         elif archetype == "undead":
                             def_scale *= 1.5
 
-                        # 퀘스트 수주 중이면 적 이름 보정 유도
                         enemy_name = res.enemy_name or "야생의 괴물"
                         if (
                             stats["active_quest"]
                             and stats["active_quest"]["target_enemy"]
                             in enemy_name
                         ):
-                            enemy_name = stats["active_quest"][
-                                "target_enemy"
-                            ]  # 일치 보정
+                            enemy_name = stats["active_quest"]["target_enemy"]
 
                         st.session_state.current_enemy = {
                             "name": enemy_name,
