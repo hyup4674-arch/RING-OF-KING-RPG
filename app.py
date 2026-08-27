@@ -13,9 +13,9 @@ SAVE_FILE = "rpg_save_v10.json"
 
 st.set_page_config(page_title="RPG Game Engine", page_icon="⚔️", layout="wide")
 
-# ⏱️ 전투 중일 때만 1초(1000ms), 탐험/기타 모드일 때는 3초(3000ms)로 주기 변경
-refresh_interval = 1000 if st.session_state.get("game_mode") == "COMBAT" else 3000
-st_autorefresh(interval=refresh_interval, limit=None, key="game_loop_counter")
+# ⏱️ 자동 갱신은 전투(COMBAT) 모드에서만 실행! (탐험 중 불필요한 새로고침 및 API 충돌 방지)
+if st.session_state.get("game_mode") == "COMBAT":
+    st_autorefresh(interval=1000, limit=None, key="combat_refresh")
 
 
 # 📋 [Pydantic 스키마]
@@ -609,7 +609,7 @@ else:
 
             last_turn = st.session_state.history[-1]
 
-            # 💡 [추가] 사용자의 행동을 처리하는 공통 함수
+            # 💡 [추가] 사용자의 행동을 처리하는 공통 함수 (로딩 스피너 포함)
             def handle_user_action(action_text, difficulty=None):
                 if not st.session_state.get("api_key"):
                     st.error("⚠️ 사이드바에 Gemini API Key를 먼저 입력해주세요!")
@@ -618,7 +618,9 @@ else:
                 # 버튼 클릭인 경우 난이도 텍스트 추가
                 prompt_text = f"{action_text} (선택한 경로 난이도: {difficulty})" if difficulty else action_text
                 
-                res = call_gemini_turn(prompt_text)
+                # 💡 [수정] 스피너를 추가하여 대기 시간 동안 충돌 방지 및 시각적 피드백 제공
+                with st.spinner("AI 게임 마스터가 다음 이야기를 생성하고 있습니다... 🎲"):
+                    res = call_gemini_turn(prompt_text)
                 
                 if res:
                     narrative = res.narrative
