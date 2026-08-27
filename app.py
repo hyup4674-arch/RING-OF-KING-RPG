@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
 st.title(
-    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (선택지 & 5개 메시지 제한 버전)"
+    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (선택지 & 2개 메시지 제한 버전)"
 )
 
 
@@ -43,15 +43,15 @@ class GameResponse(BaseModel):
     )
 
 
-# 🗑️ [AI 메시지 최근 5개 유지 및 히스토리 정리 함수]
+# 🗑️ [AI 메시지 최근 2개 유지 및 히스토리 정리 함수]
 def trim_ai_history():
     assistant_indices = [
         i
         for i, h in enumerate(st.session_state.history)
         if h.get("role") == "assistant"
     ]
-    if len(assistant_indices) > 5:
-        target_idx = assistant_indices[-5]
+    if len(assistant_indices) > 2:
+        target_idx = assistant_indices[-2]
         if (
             target_idx > 0
             and st.session_state.history[target_idx - 1].get("role") == "user"
@@ -566,15 +566,16 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.rerun()
 
     with tab_dojo:
-        st.write("전투훈련소")
-        if stats.get("skill_points", 0) > 0:
-            st.info(f"스킬 포인트: {stats['skill_points']}P")
-            for i, sk in enumerate(st.session_state.combat_dojo):
-                if sk not in stats["learned_skills"]:
-                    if st.button(
-                        f"습득: {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})",
-                        key=f"sk_{sk['name']}_{i}",
-                    ):
+        st.write("전투훈련소 (스킬 포인트로 습득)")
+        st.info(f"보유 스킬 포인트: {stats.get('skill_points', 0)}P")
+        for i, sk in enumerate(st.session_state.combat_dojo):
+            is_learned = sk in stats["learned_skills"]
+            st.markdown(
+                f"- **{sk['name']}** | 위력: `{sk['damage']}` | 소모MP: `{sk['mp_cost']}`"
+            )
+            if not is_learned:
+                if st.button(f"습득: {sk['name']}", key=f"sk_{sk['name']}_{i}"):
+                    if stats.get("skill_points", 0) > 0:
                         stats["learned_skills"].append(sk)
                         stats["skill_points"] -= 1
                         append_ai_village_dialogue(
@@ -582,17 +583,22 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         )
                         save_game()
                         st.rerun()
-        else:
-            st.write("스킬 포인트 부족")
+                    else:
+                        st.error("스킬 포인트 부족!")
+            else:
+                st.text("✅ 습득 완료됨")
+            st.markdown("---")
 
     with tab_magic:
-        st.write("마법길드 연구")
+        st.write("마법길드 연구 (골드로 마법 연구)")
+        st.markdown(f"보유 골드: **{stats['gold']} G**")
         for i, mg in enumerate(st.session_state.magic_guild):
-            if mg not in stats["learned_magic"]:
-                if st.button(
-                    f"연구: {mg['name']} (위력:{mg['damage']}, MP:{mg['mp_cost']}, {mg['price']}G)",
-                    key=f"mg_{mg['name']}_{i}",
-                ):
+            is_learned = mg in stats["learned_magic"]
+            st.markdown(
+                f"- **{mg['name']}** | 위력: `{mg['damage']}` | 소모MP: `{mg['mp_cost']}` | 가격: `{mg['price']}G`"
+            )
+            if not is_learned:
+                if st.button(f"연구: {mg['name']}", key=f"mg_{mg['name']}_{i}"):
                     if stats["gold"] >= mg["price"]:
                         stats["gold"] -= mg["price"]
                         stats["learned_magic"].append(mg)
@@ -602,7 +608,10 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         save_game()
                         st.rerun()
                     else:
-                        st.error("골드 부족")
+                        st.error("골드 부족!")
+            else:
+                st.text("✅ 연구 완료됨")
+            st.markdown("---")
 
 
 def call_gemini_turn(user_action):
