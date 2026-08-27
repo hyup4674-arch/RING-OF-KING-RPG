@@ -14,7 +14,7 @@ st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
 st.title(
-    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (초고속 간결화 & 2개 메시지 제한 버전)"
+    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (중복 방지 & 초고속 간결화 버전)"
 )
 
 
@@ -24,7 +24,9 @@ class GeneratedItem(BaseModel):
         default="",
         description="아이템 종류: 'weapon', 'armor', 'magic', 'skill' 중 하나",
     )
-    name: str = Field(default="", description="아이템, 마법 또는 스킬의 이름")
+    name: str = Field(
+        default="", description="기존에 없는 완전히 새로운 유니크한 이름"
+    )
     required_stat: int = Field(default=10, description="필요 능력치 또는 소모MP")
 
 
@@ -252,7 +254,7 @@ def add_exp(amount):
     return leveled_up
 
 
-# 🤖 [AI 대사 생성 함수 (간결화 조건 적용 + 503 재시도 로직)]
+# 🤖 [AI 마을 대사 생성 함수]
 def append_ai_village_dialogue(facility_name, action_desc):
     api_key = api_key_input
     if not api_key:
@@ -282,7 +284,7 @@ def append_ai_village_dialogue(facility_name, action_desc):
             break
         except Exception:
             if attempt < 2:
-                time.sleep(2) # 503 에러 발생 시 2초 대기 후 재시도
+                time.sleep(2)
             else:
                 pass
 
@@ -618,11 +620,16 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
             st.markdown("---")
 
 
-# 🤖 [AI 턴 생성 함수: 시스템 지침에 간결화 조건 추가 및 503 자동 재시도 적용]
+# 🤖 [AI 턴 생성 함수: 기존 아이템 목록 전달 및 중복 생성 방지 규칙 추가]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
     
-    # 💡 시스템 지침에 1~2문장 제약 추가
+    # 💡 현재 등록된 모든 무기, 방어구, 마법, 스킬 이름 목록 수집
+    existing_weapons = [w["name"] for w in st.session_state.get("weapon_shop", [])]
+    existing_armors = [a["name"] for a in st.session_state.get("armor_shop", [])]
+    existing_magics = [m["name"] for m in st.session_state.get("magic_guild", [])]
+    existing_skills = [s["name"] for s in st.session_state.get("combat_dojo", [])]
+
     system_instruction = (
         "당신은 판타지 RPG의 게임 마스터(GM)입니다.\n"
         "모든 서사(narrative)는 반드시 1~2문장으로 매우 간결하고 핵심만 담아 작성하세요.\n"
@@ -630,7 +637,11 @@ def call_gemini_turn(user_action):
         "반드시 플레이어가 다음에 선택할 수 있는 2개의 선택지(choices)를 문자열 리스트로 함께 제공하세요.\n"
         "전투가 필요하면 start_combat을 True로 설정하고 적 정보와 유형(beast, bandit, undead, mage)을 지정하세요.\n"
         "만약 플레이어가 현재 길드 의뢰(active_quest)와 관련된 적과 싸우거나 처치하도록 유도하는 상황이라면 적 이름을 퀘스트 목표에 맞게 설정해주세요.\n"
-        "모험 도중 특별한 보물이나 유물, 전설적인 무기/방어구/마법/스킬을 발견하게 된다면 `new_item` 필드를 통해 새롭게 추가할 장비나 마법 정보를 제안해주세요."
+        "🚨 [중요: 중복 생성 절대 금지] 모험 도중 새로운 `new_item`(무기, 방어구, 마법, 스킬)을 제안할 때, **아래에 이미 존재하는 목록과 이름이나 효과가 단 1이라도 겹치거나 유사한 항목은 절대 생성하지 마세요.** 완전히 새롭고 유니크한 이름과 능력치를 가진 항목만 제안해야 합니다.\n"
+        f"- 이미 등록된 무기 목록: {existing_weapons}\n"
+        f"- 이미 등록된 방어구 목록: {existing_armors}\n"
+        f"- 이미 등록된 마법 목록: {existing_magics}\n"
+        f"- 이미 등록된 스킬 목록: {existing_skills}"
     )
     
     prompt = (
@@ -643,7 +654,6 @@ def call_gemini_turn(user_action):
         + f"\n\n플레이어의 행동: {user_action}"
     )
 
-    # 💡 503 오류 대비 자동 재시도 로직 (최대 3회)
     for attempt in range(3):
         try:
             response = client.models.generate_content(
@@ -659,7 +669,7 @@ def call_gemini_turn(user_action):
             return GameResponse.model_validate_json(response.text)
         except Exception as e:
             if attempt < 2:
-                time.sleep(2) # 503 혹은 일시적 과부하 시 2초 대기 후 재시도
+                time.sleep(2)
             else:
                 st.error(f"Gemini API 오류 발생 (잠시 후 다시 시도해주세요): {e}")
                 return None
@@ -668,7 +678,7 @@ def call_gemini_turn(user_action):
 def process_user_action(user_action):
     st.session_state.history.append({"role": "user", "narrative": user_action})
 
-    with st.spinner("게임 마스터가 서사를 간결하게 전개하는 중..."):
+    with st.spinner("게임 마스터가 서사를 전개하는 중..."):
         res = call_gemini_turn(user_action)
 
         if res:
@@ -679,61 +689,66 @@ def process_user_action(user_action):
                 else ["주변을 탐색한다", "안전한 곳으로 이동한다"]
             )
 
+            # 🛡️ [파이썬 레벨 2중 중복 체크 및 추가 로직]
             if res.new_item and res.new_item.name and res.new_item.item_type:
                 item = res.new_item
                 t = item.item_type.lower()
                 req = item.required_stat
-                name = item.name
+                name = item.name.strip()
 
                 if t == "weapon":
-                    damage = int(req * 1.3)
-                    price = req * 20
-                    new_entry = {
-                        "name": name,
-                        "damage": damage,
-                        "required_str": req,
-                        "price": price,
-                    }
-                    if new_entry not in st.session_state.weapon_shop:
+                    existing_names = [w["name"] for w in st.session_state.weapon_shop]
+                    if name not in existing_names:
+                        damage = int(req * 1.3)
+                        price = req * 20
+                        new_entry = {
+                            "name": name,
+                            "damage": damage,
+                            "required_str": req,
+                            "price": price,
+                        }
                         st.session_state.weapon_shop.append(new_entry)
                         narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
 
                 elif t == "armor":
-                    defense = int(req * 1.3)
-                    price = req * 20
-                    new_entry = {
-                        "name": name,
-                        "defense": defense,
-                        "required_con": req,
-                        "price": price,
-                    }
-                    if new_entry not in st.session_state.armor_shop:
+                    existing_names = [a["name"] for a in st.session_state.armor_shop]
+                    if name not in existing_names:
+                        defense = int(req * 1.3)
+                        price = req * 20
+                        new_entry = {
+                            "name": name,
+                            "defense": defense,
+                            "required_con": req,
+                            "price": price,
+                        }
                         st.session_state.armor_shop.append(new_entry)
                         narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
 
                 elif t == "magic":
-                    damage = int(req * 2.0)
-                    price = req * 25
-                    new_entry = {
-                        "name": name,
-                        "damage": damage,
-                        "mp_cost": req,
-                        "price": price,
-                    }
-                    if new_entry not in st.session_state.magic_guild:
+                    existing_names = [m["name"] for m in st.session_state.magic_guild]
+                    if name not in existing_names:
+                        damage = int(req * 2.0)
+                        price = req * 25
+                        new_entry = {
+                            "name": name,
+                            "damage": damage,
+                            "mp_cost": req,
+                            "price": price,
+                        }
                         st.session_state.magic_guild.append(new_entry)
                         narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
 
                 elif t == "skill":
-                    damage = int(req * 1.5)
-                    price = req * 25
-                    new_entry = {
-                        "name": name,
-                        "damage": damage,
-                        "mp_cost": req,
-                        "price": price,
-                    }
-                    if new_entry not in st.session_state.combat_dojo:
+                    existing_names = [s["name"] for s in st.session_state.combat_dojo]
+                    if name not in existing_names:
+                        damage = int(req * 1.5)
+                        price = req * 25
+                        new_entry = {
+                            "name": name,
+                            "damage": damage,
+                            "mp_cost": req,
+                            "price": price,
+                        }
                         st.session_state.combat_dojo.append(new_entry)
                         narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
 
