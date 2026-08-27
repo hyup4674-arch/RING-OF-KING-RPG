@@ -39,8 +39,29 @@ class GameResponse(BaseModel):
     )
 
 
+# 🗑️ [AI 메시지 최근 3개 유지 및 히스토리 정리 함수]
+def trim_ai_history():
+    assistant_indices = [
+        i
+        for i, h in enumerate(st.session_state.history)
+        if h.get("role") == "assistant"
+    ]
+    if len(assistant_indices) > 3:
+        target_idx = assistant_indices[-3]
+        if (
+            target_idx > 0
+            and st.session_state.history[target_idx - 1].get("role") == "user"
+        ):
+            st.session_state.history = st.session_state.history[
+                target_idx - 1 :
+            ]
+        else:
+            st.session_state.history = st.session_state.history[target_idx:]
+
+
 # 💾 [세이브 및 로드 관리]
 def save_game():
+    trim_ai_history()
     data = {
         "stats": st.session_state.get("stats", {}),
         "history": st.session_state.get("history", []),
@@ -194,7 +215,6 @@ if "game_mode" not in st.session_state:
 if "current_enemy" not in st.session_state:
     st.session_state.current_enemy = saved_data.get("current_enemy", None)
 
-# 전투 서브 메뉴 상태값 추가
 if "combat_sub_menu" not in st.session_state:
     st.session_state.combat_sub_menu = None
 
@@ -228,6 +248,7 @@ def append_ai_village_dialogue(facility_name, action_desc):
                 "narrative": f"[마을 시설: {facility_name}] {action_desc}",
             }
         )
+        trim_ai_history()
         return
 
     client = genai.Client(api_key=api_key)
@@ -246,6 +267,7 @@ def append_ai_village_dialogue(facility_name, action_desc):
         st.session_state.history.append(
             {"role": "assistant", "narrative": f"🏛️ **[{facility_name}]**\n{narrative}"}
         )
+        trim_ai_history()
     except Exception:
         st.session_state.history.append(
             {
@@ -253,6 +275,7 @@ def append_ai_village_dialogue(facility_name, action_desc):
                 "narrative": f"🏛️ **[{facility_name}]** {action_desc}",
             }
         )
+        trim_ai_history()
 
 
 # ⚙️ [사이드바 설정 및 Flash-Lite 모델 5선 구성]
@@ -766,6 +789,7 @@ else:
                 st.session_state.history.append(
                     {"role": "assistant", "narrative": log}
                 )
+                trim_ai_history()
             else:
                 e_dmg = max(
                     1,
@@ -787,6 +811,7 @@ else:
                 st.session_state.history.append(
                     {"role": "assistant", "narrative": log}
                 )
+                trim_ai_history()
             save_game()
             st.rerun()
 
@@ -863,6 +888,7 @@ else:
                         st.session_state.history.append(
                             {"role": "assistant", "narrative": log}
                         )
+                        trim_ai_history()
                         save_game()
                         st.rerun()
                     else:
@@ -917,6 +943,7 @@ else:
                         st.session_state.history.append(
                             {"role": "assistant", "narrative": log}
                         )
+                        trim_ai_history()
                         save_game()
                         st.rerun()
                     else:
@@ -1011,6 +1038,7 @@ else:
                         "role": "assistant",
                         "narrative": narrative_text,
                     })
+                    trim_ai_history()
 
                     if res.start_combat:
                         st.session_state.game_mode = "COMBAT"
@@ -1043,11 +1071,6 @@ else:
                             "atk": int(atk_scale),
                             "defense": int(def_scale),
                         }
-
-                    if len(st.session_state.history) > 10:
-                        st.session_state.history = st.session_state.history[
-                            -10:
-                        ]
 
                     save_game()
                     st.rerun()
