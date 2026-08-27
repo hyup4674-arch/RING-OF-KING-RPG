@@ -572,7 +572,8 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
             for i, sk in enumerate(st.session_state.combat_dojo):
                 if sk not in stats["learned_skills"]:
                     if st.button(
-                        f"습득: {sk['name']}", key=f"sk_{sk['name']}_{i}"
+                        f"습득: {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})",
+                        key=f"sk_{sk['name']}_{i}",
                     ):
                         stats["learned_skills"].append(sk)
                         stats["skill_points"] -= 1
@@ -589,7 +590,7 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
         for i, mg in enumerate(st.session_state.magic_guild):
             if mg not in stats["learned_magic"]:
                 if st.button(
-                    f"연구: {mg['name']} ({mg['price']}G)",
+                    f"연구: {mg['name']} (위력:{mg['damage']}, MP:{mg['mp_cost']}, {mg['price']}G)",
                     key=f"mg_{mg['name']}_{i}",
                 ):
                     if stats["gold"] >= mg["price"]:
