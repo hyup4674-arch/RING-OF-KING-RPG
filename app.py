@@ -17,36 +17,25 @@ st.title(
 )
 
 
-# 📋 [Pydantic 스키마: AI가 서사, 적 정보, 그리고 새로운 아이템/마법/스킬을 제안 가능]
+# 📋 [Pydantic 스키마]
 class GeneratedItem(BaseModel):
     item_type: str = Field(
         default="",
-        description="아이템 종류: 'weapon', 'armor', 'magic', 'skill' 중 하나 (새로운 것이 없다면 빈 문자열)",
+        description="아이템 종류: 'weapon', 'armor', 'magic', 'skill' 중 하나",
     )
     name: str = Field(default="", description="아이템, 마법 또는 스킬의 이름")
-    required_stat: int = Field(
-        default=10,
-        description="무기면 필요힘, 방어구면 필요체력, 마법/스킬이면 소모MP (정수)",
-    )
+    required_stat: int = Field(default=10, description="필요 능력치 또는 소모MP")
 
 
 class GameResponse(BaseModel):
-    narrative: str = Field(
-        description="플레이어의 행동에 따른 상세하고 몰입감 넘치는 스토리 서사 묘사."
-    )
-    start_combat: bool = Field(
-        default=False, description="적과의 조우가 발생하면 True"
-    )
-    enemy_name: str = Field(
-        default="", description="조우한 적의 이름 (예: 숲속의 고블린 도적)"
-    )
+    narrative: str = Field(description="스토리 서사 묘사.")
+    start_combat: bool = Field(default=False, description="전투 조우 여부")
+    enemy_name: str = Field(default="", description="조우한 적의 이름")
     enemy_archetype: str = Field(
-        default="beast",
-        description="적의 유형 (beast, bandit, undead, mage 중 택1)",
+        default="beast", description="적의 유형 (beast, bandit, undead, mage)"
     )
     new_item: GeneratedItem = Field(
-        default=None,
-        description="탐험 중 발견하여 상점/훈련소/길드에 추가될 새로운 아이템/마법/스킬 제안",
+        default=None, description="새로운 아이템/마법/스킬 제안"
     )
 
 
@@ -204,6 +193,10 @@ if "game_mode" not in st.session_state:
 
 if "current_enemy" not in st.session_state:
     st.session_state.current_enemy = saved_data.get("current_enemy", None)
+
+# 전투 서브 메뉴 상태값 추가
+if "combat_sub_menu" not in st.session_state:
+    st.session_state.combat_sub_menu = None
 
 
 # 📈 [경험치 및 레벨업 처리]
@@ -739,6 +732,7 @@ else:
         b_col1, b_col2, b_col3 = st.columns(3)
 
         if b_col1.button("🗡️ 기본 공격", use_container_width=True):
+            st.session_state.combat_sub_menu = None
             base_atk = (stats["str"] * 0.8) + stats["equipped_weapon"][
                 "damage"
             ]
@@ -797,12 +791,33 @@ else:
             st.rerun()
 
         if stats["learned_skills"] and b_col2.button(
-            "⚡ 스킬 사용", use_container_width=True
+            "⚡ 스킬 선택", use_container_width=True
         ):
+            st.session_state.combat_sub_menu = (
+                "skill"
+                if st.session_state.combat_sub_menu != "skill"
+                else None
+            )
+            st.rerun()
+
+        if stats["learned_magic"] and b_col3.button(
+            "🔮 마법 선택", use_container_width=True
+        ):
+            st.session_state.combat_sub_menu = (
+                "magic"
+                if st.session_state.combat_sub_menu != "magic"
+                else None
+            )
+            st.rerun()
+
+        # ⚡ [스킬 선택 서브 메뉴 표시]
+        if st.session_state.combat_sub_menu == "skill":
+            st.markdown("---")
+            st.markdown("### ⚡ 사용할 전투 스킬 선택")
             for sk in stats["learned_skills"]:
                 if st.button(
-                    f"{sk['name']} (소모MP: {sk['mp_cost']})",
-                    key=f"use_sk_{sk['name']}",
+                    f"{sk['name']} (위력:{sk['damage']}, 소모MP: {sk['mp_cost']})",
+                    key=f"combat_use_sk_{sk['name']}",
                 ):
                     if stats["mp"] >= sk["mp_cost"]:
                         stats["mp"] -= sk["mp_cost"]
@@ -843,6 +858,8 @@ else:
                             )
                             stats["hp"] = max(0, stats["hp"] - e_dmg)
                             log += f"\n적의 반격! {e_dmg} 피해."
+
+                        st.session_state.combat_sub_menu = None
                         st.session_state.history.append(
                             {"role": "assistant", "narrative": log}
                         )
@@ -851,13 +868,14 @@ else:
                     else:
                         st.error("마나가 부족합니다!")
 
-        if stats["learned_magic"] and b_col3.button(
-            "🔮 마법 사용", use_container_width=True
-        ):
+        # 🔮 [마법 선택 서브 메뉴 표시]
+        if st.session_state.combat_sub_menu == "magic":
+            st.markdown("---")
+            st.markdown("### 🔮 사용할 마법 선택")
             for mg in stats["learned_magic"]:
                 if st.button(
-                    f"{mg['name']} (소모MP: {mg['mp_cost']})",
-                    key=f"use_mg_{mg['name']}",
+                    f"{mg['name']} (위력:{mg['damage']}, 소모MP: {mg['mp_cost']})",
+                    key=f"combat_use_mg_{mg['name']}",
                 ):
                     if stats["mp"] >= mg["mp_cost"]:
                         stats["mp"] -= mg["mp_cost"]
@@ -894,6 +912,8 @@ else:
                             )
                             stats["hp"] = max(0, stats["hp"] - e_dmg)
                             log += f"\n적의 반격! {e_dmg} 피해."
+
+                        st.session_state.combat_sub_menu = None
                         st.session_state.history.append(
                             {"role": "assistant", "narrative": log}
                         )
@@ -994,6 +1014,7 @@ else:
 
                     if res.start_combat:
                         st.session_state.game_mode = "COMBAT"
+                        st.session_state.combat_sub_menu = None
                         lvl = stats["level"]
                         archetype = res.enemy_archetype
                         hp_scale = 50 + (lvl * 25)
