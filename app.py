@@ -12,7 +12,7 @@ SAVE_FILE = "rpg_save_v4.json"
 st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
-st.title("⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG")
+st.title("⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (Flash-Lite 모델 강화 버전)")
 
 
 # 📋 [Pydantic 스키마: AI가 서사, 적 정보, 그리고 새로운 아이템/마법/스킬을 제안 가능]
@@ -182,20 +182,49 @@ def add_exp(amount):
     return leveled_up
 
 
-# ⚙️ [사이드바 상태창 및 마을 시설]
-st.sidebar.header("⚙️ 캐릭터 상태 및 마을 시설")
+# ⚙️ [사이드바 설정 및 Flash-Lite 모델 5선 구성]
+st.sidebar.header("⚙️ AI 모델 및 캐릭터 상태")
 api_key_input = st.sidebar.text_input(
     "Google Gemini API 키", value=DEFAULT_API_KEY, type="password"
 )
+
+# Flash-Lite 계열/상위 변형 모델 5선 정의
+flash_lite_models = [
+    {
+        "id": "gemini-3.1-flash-lite",
+        "name": "Gemini 3.1 Flash-Lite (기본)",
+        "desc": "고효율 멀티모달 저지연 모델",
+    },
+    {
+        "id": "gemini-3.5-flash-lite",
+        "name": "Gemini 3.5 Flash-Lite",
+        "desc": "최신 상위 고성능 Flash-Lite 모델",
+    },
+    {
+        "id": "gemini-2.5-flash-lite",
+        "name": "Gemini 2.5 Flash-Lite",
+        "desc": "안정적인 경제형 경량 모델",
+    },
+    {
+        "id": "gemini-3.1-flash-lite-image",
+        "name": "Gemini 3.1 Flash-Lite Image",
+        "desc": "초저지연 이미지 생성 특화 모델",
+    },
+    {
+        "id": "gemini-2.0-flash-lite",
+        "name": "Gemini 2.0 Flash-Lite",
+        "desc": "초고속 레거시 경량 모델",
+    },
+]
+
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔍 Flash-Lite 모델 라인업 (5선)")
+for m in flash_lite_models:
+    st.sidebar.markdown(f"- **{m['name']}**\n  * `{m['id']}` : {m['desc']}")
+
+model_options = [m["id"] for m in flash_lite_models]
 selected_model = st.sidebar.selectbox(
-    "Gemini 모델",
-    options=[
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite",
-        "gemini-1.5-flash",
-        "gemini-2.5-pro",
-    ],
-    index=0,
+    "사용할 Gemini 모델 선택", options=model_options, index=0
 )
 
 stats = st.session_state.stats
@@ -213,7 +242,7 @@ st.sidebar.write(
     f"- 힘: {stats['str']} | 민첩: {stats['agi']} | 체력: {stats['con']} | 지능: {stats['int']}"
 )
 
-# ⚔️ [업그레이드] 전투력 및 착용 장비, 인벤토리, 스킬/마법 전체 표시 영역
+# ⚔️ [전투력 및 장비 현황]
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚔️ 전투력 및 장비 현황")
 current_atk = int(
