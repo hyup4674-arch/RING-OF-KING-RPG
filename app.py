@@ -13,7 +13,7 @@ SAVE_FILE = "rpg_save_v10.json"
 
 st.set_page_config(page_title="RPG Game Engine", page_icon="⚔️", layout="wide")
 
-# ⏱️ 자동 갱신은 전투(COMBAT) 모드에서만 실행! (탐험 중 불필요한 새로고침 및 API 충돌 방지)
+# ⏱️ 자동 갱신은 전투(COMBAT) 모드에서만 실행! (탐험 중 불필요한 새로고침 및 API 충돌 방지)[cite: 1]
 if st.session_state.get("game_mode") == "COMBAT":
     st_autorefresh(interval=1000, limit=None, key="combat_refresh")
 
@@ -106,6 +106,7 @@ def init_character_stats(job_type):
         "level": 1,
         "exp": 0,
         "max_exp": 100,
+        "stat_points": 0,  # 💡 [추가] 사용 가능한 스탯 포인트
         "str": 10,
         "agi": 10,
         "con": 10,
@@ -129,6 +130,22 @@ def init_character_stats(job_type):
         base_stats["evasion_rate"] = 0.20
 
     return base_stats
+
+
+# 📈 [레벨업 체크 함수]
+def check_level_up(player):
+    leveled_up = False
+    level_logs = []
+    while player["exp"] >= player["max_exp"]:
+        player["exp"] -= player["max_exp"]
+        player["level"] += 1
+        player["max_exp"] = int(player["max_exp"] * 1.5)
+        player["stat_points"] = player.get("stat_points", 0) + 3  # 스탯 포인트 3증가
+        leveled_up = True
+        level_logs.append(
+            f"🎉 레벨 업! Lv.{player['level']} 달성! (스탯 포인트 +3 획득)"
+        )
+    return leveled_up, level_logs
 
 
 # 💾 [세이브/로드]
@@ -297,9 +314,15 @@ def process_auto_combat():
     if enemy["hp"] <= 0:
         player["gold"] += 150
         player["exp"] += 60
+        combat_log.append("🎉 적을 무찔렀습니다! (보상: 150G, 60 EXP)")
+
+        # 📈 레벨업 체크 실행
+        _, level_logs = check_level_up(player)
+        for l_log in level_logs:
+            combat_log.append(l_log)
+
         st.session_state.game_mode = "EXPLORATION"
         st.session_state.current_enemy = None
-        combat_log.append("🎉 적을 무찔렀습니다! (보상: 150G, 60 EXP)")
         st.session_state.history.append({
             "role": "assistant",
             "narrative": "\n".join(combat_log),
@@ -563,11 +586,52 @@ else:
     with side_col:
         st.subheader("📊 캐릭터 정보")
         st.write(f"**직업**: {p['job']}")
+        st.write(f"📈 **레벨**: {p['level']} (EXP: {p['exp']}/{p['max_exp']})")
         st.metric("❤️ HP", f"{p['hp']} / {p['max_hp']}")
         st.metric("💙 MP", f"{p['mp']} / {p['max_mp']}")
         st.write(f"💰 **골드**: {p['gold']} G")
         st.write(f"⚔️ **착용 무기**: {p['equipped_weapon']['name']}")
         st.write(f"🛡️ **착용 방어구**: {p['equipped_armor']['name']}")
+
+        st.markdown("---")
+        st.write("**[능력치 관리]**")
+        st.write(f"✨ **사용 가능 스탯 포인트**: {p.get('stat_points', 0)} P")
+        
+        # 💡 [추가] 3씩 스탯을 올릴 수 있는 분배 UI 버튼
+        can_upgrade = p.get('stat_points', 0) >= 3
+        
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.text(f"힘: {p['str']}")
+            if st.button("힘 +3", key="inc_str", disabled=not can_upgrade, use_container_width=True):
+                p['stat_points'] -= 3
+                p['str'] += 3
+                save_game()
+                st.rerun()
+                
+            st.text(f"체력: {p['con']}")
+            if st.button("체력 +3", key="inc_con", disabled=not can_upgrade, use_container_width=True):
+                p['stat_points'] -= 3
+                p['con'] += 3
+                p['max_hp'] += 15  # 체력 스탯 상승 시 최대 HP도 소폭 증가
+                p['hp'] = min(p['max_hp'], p['hp'] + 15)
+                save_game()
+                st.rerun()
+                
+        with col_s2:
+            st.text(f"민첩: {p['agi']}")
+            if st.button("민첩 +3", key="inc_agi", disabled=not can_upgrade, use_container_width=True):
+                p['stat_points'] -= 3
+                p['agi'] += 3
+                save_game()
+                st.rerun()
+                
+            st.text(f"지능: {p['int']}")
+            if st.button("지능 +3", key="inc_int", disabled=not can_upgrade, use_container_width=True):
+                p['stat_points'] -= 3
+                p['int'] += 3
+                save_game()
+                st.rerun()
 
         st.markdown("---")
         st.write("**[습득한 마법 목록]**")
@@ -602,23 +666,21 @@ else:
                 st.info(log)
 
         else:
-            # 탐험 서사 출력 및 3가지 방향 선택지
+            # 💡 [유지] AI 메시지 출력을 최신 2개까지만 제한 ([-2:])[cite: 1]
             for h in st.session_state.history[-2:]:
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
 
             last_turn = st.session_state.history[-1]
 
-            # 💡 [추가] 사용자의 행동을 처리하는 공통 함수 (로딩 스피너 포함)
+            # 💡 [유지] 사용자의 행동을 처리하는 공통 함수 (로딩 스피너 포함)[cite: 1]
             def handle_user_action(action_text, difficulty=None):
                 if not st.session_state.get("api_key"):
                     st.error("⚠️ 사이드바에 Gemini API Key를 먼저 입력해주세요!")
                     return
 
-                # 버튼 클릭인 경우 난이도 텍스트 추가
                 prompt_text = f"{action_text} (선택한 경로 난이도: {difficulty})" if difficulty else action_text
                 
-                # 💡 [수정] 스피너를 추가하여 대기 시간 동안 충돌 방지 및 시각적 피드백 제공
                 with st.spinner("AI 게임 마스터가 다음 이야기를 생성하고 있습니다... 🎲"):
                     res = call_gemini_turn(prompt_text)
                 
@@ -651,7 +713,6 @@ else:
                     save_game()
                     st.rerun()
 
-            # 💡 [수정] 턴(Turn) 수를 기반으로 고유한 Key 생성
             current_turn = len(st.session_state.history)
 
             if "choices" in last_turn and last_turn["choices"]:
@@ -662,13 +723,11 @@ else:
 
                 for idx, col in enumerate([c1, c2, c3]):
                     if idx < len(choices):
-                        # 💡 [수정] key에 current_turn을 포함하여 중복 방지
                         if col.button(f"방향 {idx+1}: {choices[idx]}", key=f"btn_{current_turn}_{idx}"):
                             difficulties = ["하 (쉬움)", "중 (보통)", "상 (매우 어려움)"]
                             random.shuffle(difficulties)
                             handle_user_action(choices[idx], difficulty=difficulties[idx])
             
-            # 💡 [추가] 자유 텍스트 입력창 (st.chat_input 활용)
             user_input = st.chat_input("원하는 행동을 직접 입력하세요 (예: 횃불을 켜고 조심스럽게 전진한다)")
             if user_input:
                 handle_user_action(user_input)
