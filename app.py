@@ -13,7 +13,7 @@ st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
 st.title(
-    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (클라우드 백업/복구 지원 버전)"
+    "⚔️ AI 서사 + 파이썬 철저 밸런스 엔진 RPG (선택지 & 5개 메시지 제한 버전)"
 )
 
 
@@ -29,6 +29,10 @@ class GeneratedItem(BaseModel):
 
 class GameResponse(BaseModel):
     narrative: str = Field(description="스토리 서사 묘사.")
+    choices: list[str] = Field(
+        default=["주변을 탐색한다", "안전한 곳으로 이동한다"],
+        description="플레이어가 선택할 수 있는 정확히 2개의 선택지 리스트",
+    )
     start_combat: bool = Field(default=False, description="전투 조우 여부")
     enemy_name: str = Field(default="", description="조우한 적의 이름")
     enemy_archetype: str = Field(
@@ -39,15 +43,15 @@ class GameResponse(BaseModel):
     )
 
 
-# 🗑️ [AI 메시지 최근 3개 유지 및 히스토리 정리 함수]
+# 🗑️ [AI 메시지 최근 5개 유지 및 히스토리 정리 함수]
 def trim_ai_history():
     assistant_indices = [
         i
         for i, h in enumerate(st.session_state.history)
         if h.get("role") == "assistant"
     ]
-    if len(assistant_indices) > 3:
-        target_idx = assistant_indices[-3]
+    if len(assistant_indices) > 5:
+        target_idx = assistant_indices[-5]
         if (
             target_idx > 0
             and st.session_state.history[target_idx - 1].get("role") == "user"
@@ -208,6 +212,16 @@ if "active_quest" not in st.session_state.stats:
 
 if "history" not in st.session_state:
     st.session_state.history = saved_data.get("history", [])
+    # 초기 기록이 없을 경우 첫 기본 안내 추가
+    if not st.session_state.history:
+        st.session_state.history.append({
+            "role": "assistant",
+            "narrative": (
+                "모험의 세상에 오신 것을 환영합니다! 평화로운 마을에서 첫걸음을"
+                " 내딛습니다."
+            ),
+            "choices": ["주변 숲으로 모험을 떠난다", "마을 상점과 시설을 둘러본다"],
+        })
 
 if "game_mode" not in st.session_state:
     st.session_state.game_mode = saved_data.get("game_mode", "EXPLORATION")
@@ -242,12 +256,11 @@ def add_exp(amount):
 def append_ai_village_dialogue(facility_name, action_desc):
     api_key = api_key_input
     if not api_key:
-        st.session_state.history.append(
-            {
-                "role": "assistant",
-                "narrative": f"[마을 시설: {facility_name}] {action_desc}",
-            }
-        )
+        st.session_state.history.append({
+            "role": "assistant",
+            "narrative": f"[마을 시설: {facility_name}] {action_desc}",
+            "choices": ["마을 광장으로 돌아간다", "다른 시설을 이용한다"],
+        })
         trim_ai_history()
         return
 
@@ -264,24 +277,24 @@ def append_ai_village_dialogue(facility_name, action_desc):
             if response.text
             else f"'{facility_name}'에서의 볼일을 마쳤습니다."
         )
-        st.session_state.history.append(
-            {"role": "assistant", "narrative": f"🏛️ **[{facility_name}]**\n{narrative}"}
-        )
+        st.session_state.history.append({
+            "role": "assistant",
+            "narrative": f"🏛️ **[{facility_name}]**\n{narrative}",
+            "choices": ["모험을 계속한다", "마을에 머문다"],
+        })
         trim_ai_history()
     except Exception:
-        st.session_state.history.append(
-            {
-                "role": "assistant",
-                "narrative": f"🏛️ **[{facility_name}]** {action_desc}",
-            }
-        )
+        st.session_state.history.append({
+            "role": "assistant",
+            "narrative": f"🏛️ **[{facility_name}]** {action_desc}",
+            "choices": ["모험을 계속한다", "마을에 머문다"],
+        })
         trim_ai_history()
 
 
 # ⚙️ [좌측 슬라이드 창 설정]
 st.sidebar.header("⚙️ 게임 설정 및 메뉴")
 
-# 기본값 선언
 api_key_input = DEFAULT_API_KEY
 selected_model = "gemini-3.1-flash-lite"
 
@@ -594,6 +607,7 @@ def call_gemini_turn(user_action):
     system_instruction = (
         "당신은 판타지 RPG의 게임 마스터(GM)입니다.\n"
         "플레이어의 탐험 행동에 따른 흥미진진한 서사를 묘사하세요.\n"
+        "반드시 플레이어가 다음에 선택할 수 있는 2개의 선택지(choices)를 문자열 리스트로 함께 제공하세요.\n"
         "전투가 필요하면 start_combat을 True로 설정하고 적 정보와 유형(beast, bandit, undead, mage)을 지정하세요.\n"
         "만약 플레이어가 현재 길드 의뢰(active_quest)와 관련된 적과 싸우거나 처치하도록 유도하는 상황이라면 적 이름을 퀘스트 목표에 맞게 설정해주세요.\n"
         "모험 도중 특별한 보물이나 유물, 전설적인 무기/방어구/마법/스킬을 발견하게 된다면 `new_item` 필드를 통해 새롭게 추가할 장비나 마법 정보를 제안해주세요."
@@ -623,6 +637,120 @@ def call_gemini_turn(user_action):
     except Exception as e:
         st.error(f"Gemini API 오류: {e}")
         return None
+
+
+def process_user_action(user_action):
+    st.session_state.history.append({"role": "user", "narrative": user_action})
+
+    with st.spinner("게임 마스터가 서사를 전개하는 중..."):
+        res = call_gemini_turn(user_action)
+
+        if res:
+            narrative_text = res.narrative
+            choices = (
+                res.choices[:2]
+                if res.choices and len(res.choices) >= 2
+                else ["주변을 탐색한다", "안전한 곳으로 이동한다"]
+            )
+
+            if res.new_item and res.new_item.name and res.new_item.item_type:
+                item = res.new_item
+                t = item.item_type.lower()
+                req = item.required_stat
+                name = item.name
+
+                if t == "weapon":
+                    damage = int(req * 1.3)
+                    price = req * 20
+                    new_entry = {
+                        "name": name,
+                        "damage": damage,
+                        "required_str": req,
+                        "price": price,
+                    }
+                    if new_entry not in st.session_state.weapon_shop:
+                        st.session_state.weapon_shop.append(new_entry)
+                        narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
+
+                elif t == "armor":
+                    defense = int(req * 1.3)
+                    price = req * 20
+                    new_entry = {
+                        "name": name,
+                        "defense": defense,
+                        "required_con": req,
+                        "price": price,
+                    }
+                    if new_entry not in st.session_state.armor_shop:
+                        st.session_state.armor_shop.append(new_entry)
+                        narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
+
+                elif t == "magic":
+                    damage = int(req * 2.0)
+                    price = req * 25
+                    new_entry = {
+                        "name": name,
+                        "damage": damage,
+                        "mp_cost": req,
+                        "price": price,
+                    }
+                    if new_entry not in st.session_state.magic_guild:
+                        st.session_state.magic_guild.append(new_entry)
+                        narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
+
+                elif t == "skill":
+                    damage = int(req * 1.5)
+                    price = req * 25
+                    new_entry = {
+                        "name": name,
+                        "damage": damage,
+                        "mp_cost": req,
+                        "price": price,
+                    }
+                    if new_entry not in st.session_state.combat_dojo:
+                        st.session_state.combat_dojo.append(new_entry)
+                        narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
+
+            st.session_state.history.append({
+                "role": "assistant",
+                "narrative": narrative_text,
+                "choices": choices,
+            })
+            trim_ai_history()
+
+            if res.start_combat:
+                st.session_state.game_mode = "COMBAT"
+                st.session_state.combat_sub_menu = None
+                lvl = stats["level"]
+                archetype = res.enemy_archetype
+                hp_scale = 50 + (lvl * 25)
+                atk_scale = 12 + (lvl * 4)
+                def_scale = 5 + (lvl * 2)
+
+                if archetype == "mage":
+                    atk_scale *= 1.3
+                    hp_scale *= 0.8
+                elif archetype == "undead":
+                    def_scale *= 1.5
+
+                enemy_name = res.enemy_name or "야생의 괴물"
+                if (
+                    stats["active_quest"]
+                    and stats["active_quest"]["target_enemy"] in enemy_name
+                ):
+                    enemy_name = stats["active_quest"]["target_enemy"]
+
+                st.session_state.current_enemy = {
+                    "name": enemy_name,
+                    "level": lvl,
+                    "hp": int(hp_scale),
+                    "max_hp": int(hp_scale),
+                    "atk": int(atk_scale),
+                    "defense": int(def_scale),
+                }
+
+            save_game()
+            st.rerun()
 
 
 # 🖥️ [메인 화면: 메인 콘텐츠 영역과 항상 띄워놓는 우측 슬라이드(기본 능력치) 영역 분할]
@@ -766,9 +894,11 @@ with main_col:
                     st.session_state.game_mode = "EXPLORATION"
                     st.session_state.current_enemy = None
                     log += f"\n🎉 승리! (보상: {gold_rew}G, {exp_rew} EXP){' [레벨 업!]' if leveled else ''}"
-                    st.session_state.history.append(
-                        {"role": "assistant", "narrative": log}
-                    )
+                    st.session_state.history.append({
+                        "role": "assistant",
+                        "narrative": log,
+                        "choices": ["마을로 돌아간다", "계속 탐험한다"],
+                    })
                     trim_ai_history()
                 else:
                     e_dmg = max(
@@ -788,9 +918,11 @@ with main_col:
                         st.session_state.game_mode = "EXPLORATION"
                         st.session_state.current_enemy = None
                         log += "\n💀 전투에서 패배하여 쓰러졌으나 겨우 정신을 차렸다."
-                    st.session_state.history.append(
-                        {"role": "assistant", "narrative": log}
-                    )
+                    st.session_state.history.append({
+                        "role": "assistant",
+                        "narrative": log,
+                        "choices": ["정비를 위해 마을로 간다", "다시 도전한다"],
+                    })
                     trim_ai_history()
                 save_game()
                 st.rerun()
@@ -868,9 +1000,11 @@ with main_col:
                                 log += f"\n적의 반격! {e_dmg} 피해."
 
                             st.session_state.combat_sub_menu = None
-                            st.session_state.history.append(
-                                {"role": "assistant", "narrative": log}
-                            )
+                            st.session_state.history.append({
+                                "role": "assistant",
+                                "narrative": log,
+                                "choices": ["마을로 돌아간다", "계속 탐험한다"],
+                            })
                             trim_ai_history()
                             save_game()
                             st.rerun()
@@ -926,9 +1060,11 @@ with main_col:
                                 log += f"\n적의 반격! {e_dmg} 피해."
 
                             st.session_state.combat_sub_menu = None
-                            st.session_state.history.append(
-                                {"role": "assistant", "narrative": log}
-                            )
+                            st.session_state.history.append({
+                                "role": "assistant",
+                                "narrative": log,
+                                "choices": ["마을로 돌아간다", "계속 탐험한다"],
+                            })
                             trim_ai_history()
                             save_game()
                             st.rerun()
@@ -939,139 +1075,33 @@ with main_col:
                 st.info(st.session_state.history[-1].get("narrative", ""))
 
         else:
-            for h in st.session_state.history:
+            # 채팅 히스토리 렌더링 (최근 5개의 AI 메시지 흐름에 맞춰 출력)
+            for idx, h in enumerate(st.session_state.history):
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
 
-            chat_input = st.chat_input(
-                "원하는 행동을 입력하세요... (예: 숲으로 이동한다)"
-            )
-
-            if chat_input:
-                st.session_state.history.append(
-                    {"role": "user", "narrative": chat_input}
-                )
-                with st.chat_message("user"):
-                    st.markdown(chat_input)
-
-                with st.spinner("게임 마스터가 서사를 전개하는 중..."):
-                    res = call_gemini_turn(chat_input)
-
-                    if res:
-                        narrative_text = res.narrative
-
-                        if (
-                            res.new_item
-                            and res.new_item.name
-                            and res.new_item.item_type
+                    # 마지막 어시스턴트 메시지이고 선택지가 존재할 경우 클릭 버튼 2개 제공
+                    if (
+                        h["role"] == "assistant"
+                        and idx == len(st.session_state.history) - 1
+                        and "choices" in h
+                        and h["choices"]
+                    ):
+                        st.markdown("---")
+                        st.markdown("**💡 선택지:**")
+                        c_btn1, c_btn2 = st.columns(2)
+                        choices = h["choices"]
+                        if len(choices) >= 1 and c_btn1.button(
+                            f"1️⃣ {choices[0]}", key=f"choice_0_{idx}"
                         ):
-                            item = res.new_item
-                            t = item.item_type.lower()
-                            req = item.required_stat
-                            name = item.name
+                            process_user_action(choices[0])
+                        if len(choices) >= 2 and c_btn2.button(
+                            f"2️⃣ {choices[1]}", key=f"choice_1_{idx}"
+                        ):
+                            process_user_action(choices[1])
 
-                            if t == "weapon":
-                                damage = int(req * 1.3)
-                                price = req * 20
-                                new_entry = {
-                                    "name": name,
-                                    "damage": damage,
-                                    "required_str": req,
-                                    "price": price,
-                                }
-                                if (
-                                    new_entry
-                                    not in st.session_state.weapon_shop
-                                ):
-                                    st.session_state.weapon_shop.append(
-                                        new_entry
-                                    )
-                                    narrative_text += f"\n\n✨ **[발견]** 새로운 무기 [{name}]이(가) 대장간에 입고되었습니다!"
-
-                            elif t == "armor":
-                                defense = int(req * 1.3)
-                                price = req * 20
-                                new_entry = {
-                                    "name": name,
-                                    "defense": defense,
-                                    "required_con": req,
-                                    "price": price,
-                                }
-                                if new_entry not in st.session_state.armor_shop:
-                                    st.session_state.armor_shop.append(
-                                        new_entry
-                                    )
-                                    narrative_text += f"\n\n✨ **[발견]** 새로운 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
-
-                            elif t == "magic":
-                                damage = int(req * 2.0)
-                                price = req * 25
-                                new_entry = {
-                                    "name": name,
-                                    "damage": damage,
-                                    "mp_cost": req,
-                                    "price": price,
-                                }
-                                if new_entry not in st.session_state.magic_guild:
-                                    st.session_state.magic_guild.append(
-                                        new_entry
-                                    )
-                                    narrative_text += f"\n\n🔮 **[발견]** 새로운 마법 [{name}]이(가) 마법길드에 연구되었습니다!"
-
-                            elif t == "skill":
-                                damage = int(req * 1.5)
-                                price = req * 25
-                                new_entry = {
-                                    "name": name,
-                                    "damage": damage,
-                                    "mp_cost": req,
-                                    "price": price,
-                                }
-                                if new_entry not in st.session_state.combat_dojo:
-                                    st.session_state.combat_dojo.append(
-                                        new_entry
-                                    )
-                                    narrative_text += f"\n\n🥋 **[발견]** 새로운 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!"
-
-                        st.session_state.history.append({
-                            "role": "assistant",
-                            "narrative": narrative_text,
-                        })
-                        trim_ai_history()
-
-                        if res.start_combat:
-                            st.session_state.game_mode = "COMBAT"
-                            st.session_state.combat_sub_menu = None
-                            lvl = stats["level"]
-                            archetype = res.enemy_archetype
-                            hp_scale = 50 + (lvl * 25)
-                            atk_scale = 12 + (lvl * 4)
-                            def_scale = 5 + (lvl * 2)
-
-                            if archetype == "mage":
-                                atk_scale *= 1.3
-                                hp_scale *= 0.8
-                            elif archetype == "undead":
-                                def_scale *= 1.5
-
-                            enemy_name = res.enemy_name or "야생의 괴물"
-                            if (
-                                stats["active_quest"]
-                                and stats["active_quest"]["target_enemy"]
-                                in enemy_name
-                            ):
-                                enemy_name = stats["active_quest"][
-                                    "target_enemy"
-                                ]
-
-                            st.session_state.current_enemy = {
-                                "name": enemy_name,
-                                "level": lvl,
-                                "hp": int(hp_scale),
-                                "max_hp": int(hp_scale),
-                                "atk": int(atk_scale),
-                                "defense": int(def_scale),
-                            }
-
-                        save_game()
-                        st.rerun()
+            chat_input = st.chat_input(
+                "원하는 행동을 직접 입력하거나 위 선택지를 클릭하세요..."
+            )
+            if chat_input:
+                process_user_action(chat_input)
