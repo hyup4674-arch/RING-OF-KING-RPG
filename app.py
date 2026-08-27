@@ -13,8 +13,49 @@ SAVE_FILE = "rpg_save_v10.json"
 
 st.set_page_config(page_title="RPG Game Engine", page_icon="⚔️", layout="wide")
 
-# ⏱️ [수정] 자동 전투 주기를 3초(3000ms)로 변경
-if st.session_state.get("game_mode") == "COMBAT":
+# 🎨 박스가 커졌다 작아지는 애니메이션 및 UI 스타일 CSS 주입
+st.markdown("""
+    <style>
+    @keyframes pulse-box {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); box-shadow: 0 0 15px rgba(255, 75, 75, 0.4); }
+        100% { transform: scale(1); }
+    }
+    @keyframes pulse-enemy-box {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.02); box-shadow: 0 0 15px rgba(28, 131, 225, 0.4); }
+        100% { transform: scale(1); }
+    }
+    .player-attack-box {
+        padding: 12px;
+        border-radius: 8px;
+        background-color: rgba(255, 75, 75, 0.1);
+        border-left: 5px solid #ff4b4b;
+        margin-bottom: 10px;
+        animation: pulse-box 0.6s ease-in-out;
+    }
+    .enemy-attack-box {
+        padding: 12px;
+        border-radius: 8px;
+        background-color: rgba(28, 131, 225, 0.1);
+        border-left: 5px solid #1c83e1;
+        margin-bottom: 10px;
+        animation: pulse-enemy-box 0.6s ease-in-out;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# 🎵 모드에 따른 배경음악(BGM) 자동 전환 출력
+current_mode = st.session_state.get("game_mode", "CLASS_SELECT")
+if current_mode == "COMBAT":
+    bgm_url = "https://actions.google.com/sounds/v1/ambiences/creepy_wind.ogg"
+    st.markdown(f'<audio autoplay loop controls src="{bgm_url}" style="display:none;"></audio>', unsafe_allow_html=True)
+else:
+    bgm_url = "https://actions.google.com/sounds/v1/ambiences/outdoor_altar_ambience.ogg"
+    st.markdown(f'<audio autoplay loop controls src="{bgm_url}" style="display:none;"></audio>', unsafe_allow_html=True)
+
+# ⏱️ 자동 전투 주기는 3초(3000ms)
+if current_mode == "COMBAT":
     st_autorefresh(interval=3000, limit=None, key="combat_refresh")
 
 
@@ -144,7 +185,7 @@ def check_level_up(player):
     return leveled_up, level_logs
 
 
-# 💾 [세이브/로드]
+# 💾 [세이브/로드 파일 관리]
 def save_game():
     data = {
         "stats": st.session_state.get("stats", {}),
@@ -156,9 +197,20 @@ def save_game():
         json.dump(data, f, ensure_ascii=False)
 
 
-# 🕹️ [직업 선택 모드 체크]
+# 🕹️ [직업 선택 모드 체크 및 자동 불러오기(이어하기) 기능]
 if "stats" not in st.session_state:
-    st.session_state.game_mode = "CLASS_SELECT"
+    if os.path.exists(SAVE_FILE):
+        try:
+            with open(SAVE_FILE, "r", encoding="utf-8") as f:
+                saved_data = json.load(f)
+                st.session_state.stats = saved_data.get("stats", {})
+                st.session_state.history = saved_data.get("history", [])
+                st.session_state.game_mode = saved_data.get("game_mode", "EXPLORATION")
+                st.session_state.current_enemy = saved_data.get("current_enemy", None)
+        except Exception:
+            st.session_state.game_mode = "CLASS_SELECT"
+    else:
+        st.session_state.game_mode = "CLASS_SELECT"
 
 # ⏱️ [3초 마다 HP/MP 1 회복 로직]
 if "stats" in st.session_state and st.session_state.stats:
@@ -232,7 +284,7 @@ def call_gemini_turn(user_action):
         return None
 
 
-# ⚔️ [자동 전투 루프 - 로그 타입 및 효과음 지정 추가]
+# ⚔️ [자동 전투 루프]
 def process_auto_combat():
     player = st.session_state.stats
     enemy = st.session_state.current_enemy
@@ -262,7 +314,7 @@ def process_auto_combat():
             max_dmg = s["damage"]
             best_action = ("skill", s)
 
-    # 1. 플레이어 공격 (타류/타격음 = hit)
+    # 1. 플레이어 공격
     if best_action and best_action[0] == "magic":
         mg = best_action[1]
         player["mp"] -= mg["mp_cost"]
@@ -292,7 +344,6 @@ def process_auto_combat():
         combat_log.append({
             "text": f"🔮 마법 [{mg['name']}] 시전! {dmg}의 데미지를 입혔습니다.",
             "type": "player",
-            "sound": "hit",
         })
 
     elif best_action and best_action[0] == "skill":
@@ -309,7 +360,6 @@ def process_auto_combat():
         combat_log.append({
             "text": f"⚡ 스킬 [{sk['name']}] 발동! {dmg}의 데미지를 입혔습니다.",
             "type": "player",
-            "sound": "hit",
         })
 
     else:
@@ -324,7 +374,6 @@ def process_auto_combat():
         combat_log.append({
             "text": f"🗡️ 기본 공격으로 {dmg}의 데미지를 입혔습니다.",
             "type": "player",
-            "sound": "hit",
         })
 
     # 적 처치 확인
@@ -369,7 +418,7 @@ def process_auto_combat():
             save_game()
             return
 
-    # 2. 적의 공격 (피격음/으악 = hurt)
+    # 2. 적의 공격
     e_dmg = enemy["atk"]
     if player["job"] == "전사" and random.random() < 0.20:
         combat_log.append({
@@ -393,9 +442,8 @@ def process_auto_combat():
         actual_dmg = max(1, e_dmg - (player["equipped_armor"]["defense"] // 2))
         player["hp"] = max(0, player["hp"] - actual_dmg)
         combat_log.append({
-            "text": f"💥 적의 공격! 으악! {actual_dmg}의 피해를 입었습니다.",
+            "text": f"💥 적의 공격! {actual_dmg}의 피해를 입었습니다.",
             "type": "enemy",
-            "sound": "hurt",
         })
 
     if player["hp"] <= 0:
@@ -420,7 +468,7 @@ def process_auto_combat():
     save_game()
 
 
-# --- 🖥️ UI 및 메인 로직 ---
+# --- 🖥️ UI 및 사이드바 설정 ---
 
 st.sidebar.title("⚙️ 시스템 설정")
 
@@ -445,6 +493,38 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# 💾 [추가] 사이드바 세이브 파일 다운로드 및 업로드(불러오기) 기능
+st.sidebar.markdown("---")
+st.sidebar.subheader("💾 세이브 파일 관리")
+
+# 현재 파일 다운로드 버튼
+if os.path.exists(SAVE_FILE):
+    with open(SAVE_FILE, "r", encoding="utf-8") as f:
+        save_data_str = f.read()
+    st.sidebar.download_button(
+        label="📥 현재 세이브 파일 다운로드",
+        data=save_data_str,
+        file_name="rpg_save_game.json",
+        mime="application/json",
+        use_container_width=True
+    )
+
+# 다른 기기/PC에서 저장했던 세이브 파일 업로드(불러오기)
+uploaded_file = st.sidebar.file_uploader("📂 세이브 파일 불러오기", type=["json"])
+if uploaded_file is not None:
+    try:
+        loaded_json = json.load(uploaded_file)
+        st.session_state.stats = loaded_json.get("stats", {})
+        st.session_state.history = loaded_json.get("history", [])
+        st.session_state.game_mode = loaded_json.get("game_mode", "EXPLORATION")
+        st.session_state.current_enemy = loaded_json.get("current_enemy", None)
+        save_game()  # 서버 저장소에도 동기화
+        st.sidebar.success("성공적으로 게임 데이터를 불러왔습니다!")
+        st.rerun()
+    except Exception as e:
+        st.sidebar.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+
+
 if st.session_state.game_mode == "CLASS_SELECT":
     st.header("⚔️ 클래스를 선택하여 모험을 시작하세요")
     c1, c2, c3 = st.columns(3)
@@ -466,6 +546,7 @@ if st.session_state.game_mode == "CLASS_SELECT":
                 "오른쪽 덤불 숲길",
             ],
         }]
+        save_game()
         st.rerun()
 
     if c2.button("🗡️ 전사", use_container_width=True):
@@ -485,6 +566,7 @@ if st.session_state.game_mode == "CLASS_SELECT":
                 "오른쪽 덤불 숲길",
             ],
         }]
+        save_game()
         st.rerun()
 
     if c3.button("🏹 궁수", use_container_width=True):
@@ -504,6 +586,7 @@ if st.session_state.game_mode == "CLASS_SELECT":
                 "오른쪽 덤불 숲길",
             ],
         }]
+        save_game()
         st.rerun()
 
 else:
@@ -719,32 +802,15 @@ else:
             for log in logs:
                 l_type = log.get("type", "system")
                 l_text = log["text"]
-                sound = log.get("sound")
 
-                # 🔊 효과음 출력 (HTML5 오디오 태그)
-                if sound == "hit":
-                    st.markdown(
-                        '<audio autoplay'
-                        ' src="https://www.myinstants.com/media/sounds/hit.mp3"></audio>',
-                        unsafe_allow_html=True,
-                    )
-                elif sound == "hurt":
-                    st.markdown(
-                        '<audio autoplay'
-                        ' src="https://www.myinstants.com/media/sounds/oof.mp3"></audio>',
-                        unsafe_allow_html=True,
-                    )
-
-                # 🎨 플레이어 공격은 붉은색 박스(st.error), 적 공격은 푸른색 박스(st.info)
                 if l_type == "player":
-                    st.error(l_text)
+                    st.markdown(f'<div class="player-attack-box">⚔️ {l_text}</div>', unsafe_allow_html=True)
                 elif l_type == "enemy":
-                    st.info(l_text)
+                    st.markdown(f'<div class="enemy-attack-box">🛡️ {l_text}</div>', unsafe_allow_html=True)
                 else:
                     st.warning(l_text)
 
         else:
-            # 💡 [유지] AI 메시지 출력을 최신 2개까지만 제한 ([-2:])[cite: 1]
             for h in st.session_state.history[-2:]:
                 with st.chat_message(h["role"]):
                     st.markdown(h.get("narrative", ""))
