@@ -8,12 +8,12 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 DEFAULT_API_KEY = ""
-SAVE_FILE = "rpg_save_v8.json"
+SAVE_FILE = "rpg_save_v8_revert.json"
 
 st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
-st.title("⚔️ 반지의 제왕: AI 서사 + 즉발 전투 엔진 RPG")
+st.title("⚔️ 반지의 제왕: AI 서사 + 실시간 턴제 전투 엔진 RPG")
 
 
 # 📋 [Pydantic 스키마 - 게임 서사 전용 (아이템 생성 제거)]
@@ -276,7 +276,7 @@ with st.sidebar.expander("🔑 AI 모델 및 클라우드 세이브", expanded=T
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
             save_data_str = f.read()
-        st.download_button(label="📥 세이브 파일 백업", data=save_data_str, file_name="rpg_save_v8.json", mime="application/json", use_container_width=True)
+        st.download_button(label="📥 세이브 파일 백업", data=save_data_str, file_name="rpg_save_v8_revert.json", mime="application/json", use_container_width=True)
 
 stats = st.session_state.stats
 
@@ -389,8 +389,12 @@ def process_user_action(user_action):
             st.session_state.current_enemy = st.session_state.pending_enemy
             st.session_state.pending_enemy = None
             st.session_state.game_mode = "COMBAT"
+            
+            # 전투 진입 시 전투 로그 초기화
+            st.session_state.combat_log = []
+            
             save_game()
-            st.rerun()  # COMBAT 모드로 전환하기 위해 한 번만 재실행
+            st.rerun() 
             return
         elif "도망" in clean_action or "2️⃣" in clean_action:
             st.session_state.history.append({"role": "user", "narrative": "도망친다"})
@@ -440,7 +444,7 @@ with right_col:
     st.markdown("---")
     st.write(f"- **힘**: {stats['str']} | **민첩**: {stats['agi']}\n- **체력**: {stats['con']} | **지능**: {stats['int']}")
     
-    # 🔄 [상점 리뉴얼 버튼 (스토리에 섞이지 않고 여기서만 장비 획득 유도)]
+    # 🔄 [상점 리뉴얼 버튼]
     st.markdown("---")
     st.subheader("🛒 상점 리뉴얼")
     if st.button("🔄 착용 가능 신규 물품 입고 (AI)", use_container_width=True):
@@ -456,15 +460,40 @@ with main_col:
     if not api_key_input:
         st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
     else:
-        # ⚔️ [전투 모드: 단일 루프로 즉시 계산 (로딩 스피너 제거, API 호출 없음)]
+        # ⚔️ [전투 모드: 턴마다 렌더링되는 실시간 체력바 전투 (이전 방식)]
         if st.session_state.game_mode == "COMBAT":
             enemy = st.session_state.current_enemy
             
-            # 한 번의 런타임 안에서 전투를 모두 연산하고 텍스트 로그로 저장
-            combat_log = [f"### ⚔️ {enemy['name']} 와(과)의 전투 결과\n"]
+            st.subheader(f"⚔️ 전투 진행 중: {enemy['name']}")
             
-            while enemy["hp"] > 0 and stats["hp"] > 0:
-                # 1. 플레이어 공격 페이즈
+            # 전투 UI (체력바)
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**🛡️ 플레이어** (Lv.{stats['level']})")
+                hp_pct = max(0.0, min(1.0, stats['hp'] / stats['max_hp']))
+                st.progress(hp_pct)
+                st.write(f"HP: {max(0, stats['hp'])} / {stats['max_hp']}")
+                
+            with col2:
+                st.markdown(f"**👹 {enemy['name']}** (Lv.{enemy['level']})")
+                ehp_pct = max(0.0, min(1.0, enemy['hp'] / enemy['max_hp']))
+                st.progress(ehp_pct)
+                st.write(f"HP: {max(0, enemy['hp'])} / {enemy['max_hp']}")
+
+            st.markdown("---")
+            
+            # 실시간 전투 로그 출력
+            if "combat_log" not in st.session_state:
+                st.session_state.combat_log = []
+                
+            for log in st.session_state.combat_log:
+                st.write(log)
+                
+            # 턴 진행 로직 (쌍방의 체력이 남았을 때만 자동 루프)
+            if enemy["hp"] > 0 and stats["hp"] > 0:
+                time.sleep(1) # 턴 사이의 긴장감을 위한 1초 딜레이
+                
+                # 1. 플레이어 공격 연산
                 best_attack_name = "기본 공격"
                 max_skill_dmg = -1
                 best_skill = None
@@ -489,50 +518,62 @@ with main_col:
 
                 enemy["hp"] -= p_dmg
                 crit_str = " **[크리티컬!]**" if crit else ""
-                combat_log.append(f"- 🗡️ 플레이어의 {best_attack_name}{crit_str}! 적에게 **{p_dmg}** 데미지 (적 HP: {max(0, enemy['hp'])})")
+                st.session_state.combat_log.append(f"🗡️ 플레이어의 {best_attack_name}{crit_str}! 적에게 **{p_dmg}** 데미지")
 
-                if enemy["hp"] <= 0:
-                    break
-
-                # 2. 적 반격 페이즈
-                total_player_def = stats["equipped_armor"].get("defense", 0) + stats["con"]
-                e_dmg = max(1, enemy["atk"] - total_player_def)
-                stats["hp"] -= e_dmg
-                combat_log.append(f"- 🩸 적의 공격! 플레이어에게 **{e_dmg}** 데미지 (내 HP: {max(0, stats['hp'])})")
-
-            # 3. 전투 종료 판정
-            if enemy["hp"] <= 0:
-                gold_rew = enemy["level"] * 20
-                exp_rew = enemy["level"] * 35
-                if stats["active_quest"] and stats["active_quest"]["target_enemy"] in enemy["name"]:
-                    gold_rew += stats["active_quest"]["reward_gold"]
-                    exp_rew += stats["active_quest"]["reward_exp"]
-                    combat_log.append("\n📜 **길드 의뢰 목표 달성!**")
-                    stats["active_quest"] = None
+                # 2. 적 반격 연산 (적이 살아있을 경우에만)
+                if enemy["hp"] > 0:
+                    total_player_def = stats["equipped_armor"].get("defense", 0) + stats["con"]
+                    e_dmg = max(1, enemy["atk"] - total_player_def)
+                    stats["hp"] -= e_dmg
+                    st.session_state.combat_log.append(f"🩸 적의 공격! 플레이어에게 **{e_dmg}** 데미지")
                 
-                stats["gold"] += gold_rew
-                leveled = add_exp(exp_rew)
-                combat_log.append(f"\n🎉 **전투 승리!** {gold_rew}G 및 {exp_rew}EXP 획득.")
-                if leveled:
-                    combat_log.append("🌟 **레벨 업! 스탯 포인트 획득!**")
+                save_game()
+                st.rerun() # 다음 턴을 그리기 위해 즉시 리런 (스피너 발생)
+                
+            # 전투 종료 판정
             else:
-                combat_log.append("\n💀 **전투 패배...** 의식을 잃고 간신히 목숨만 부지했습니다.")
-                stats["hp"] = 15
+                st.markdown("---")
+                if enemy["hp"] <= 0:
+                    st.success("🎉 전투에서 승리했습니다!")
+                    gold_rew = enemy["level"] * 20
+                    exp_rew = enemy["level"] * 35
+                    
+                    if stats["active_quest"] and stats["active_quest"]["target_enemy"] in enemy["name"]:
+                        gold_rew += stats["active_quest"]["reward_gold"]
+                        exp_rew += stats["active_quest"]["reward_exp"]
+                        st.info("📜 **길드 의뢰 목표 달성!** 추가 보상을 획득했습니다.")
+                        stats["active_quest"] = None
+                    
+                    stats["gold"] += gold_rew
+                    leveled = add_exp(exp_rew)
+                    st.write(f"💰 {gold_rew}G 획득 | 📈 {exp_rew}EXP 획득")
+                    
+                    if leveled:
+                        st.warning("🌟 **레벨 업!** 최대 체력과 마나가 상승했습니다.")
+                else:
+                    st.error("💀 전투 패배... 의식을 잃고 간신히 목숨만 부지했습니다.")
+                    stats["hp"] = 15
 
-            # 연산이 끝났으므로 채팅 내역에 전투 결과를 즉시 추가하고 탐색 모드로 복귀
-            st.session_state.game_mode = "EXPLORATION"
-            st.session_state.current_enemy = None
-            
-            choices = ["주변을 탐색한다", "안전한 곳으로 이동한다"] if stats["hp"] > 15 else ["서둘러 여관으로 향한다", "포션을 마신다"]
-            
-            st.session_state.history.append({
-                "role": "assistant",
-                "narrative": "\n".join(combat_log),
-                "choices": choices
-            })
-            trim_ai_history()
-            save_game()
-            st.rerun()
+                # 복귀 버튼
+                if st.button("탐색 모드로 돌아가기", use_container_width=True):
+                    # 전투 결과를 간단히 요약하여 채팅 기록에 추가
+                    summary = f"⚔️ {enemy['name']} 와(과)의 전투에서 {'승리했습니다!' if enemy['hp'] <= 0 else '패배하여 도망쳤습니다...'}"
+                    choices = ["주변을 탐색한다", "안전한 곳으로 이동한다"] if stats["hp"] > 15 else ["서둘러 여관으로 향한다", "포션을 마신다"]
+                    
+                    st.session_state.history.append({
+                        "role": "assistant",
+                        "narrative": summary,
+                        "choices": choices
+                    })
+                    
+                    st.session_state.game_mode = "EXPLORATION"
+                    st.session_state.current_enemy = None
+                    if "combat_log" in st.session_state:
+                        del st.session_state.combat_log
+                    
+                    trim_ai_history()
+                    save_game()
+                    st.rerun()
 
         # 🗺️ [탐색/스토리 모드 (채팅 UI 렌더링)]
         else:
