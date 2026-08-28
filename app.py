@@ -82,6 +82,7 @@ def save_game():
         "history": st.session_state.get("history", []),
         "game_mode": st.session_state.get("game_mode", "EXPLORATION"),
         "current_enemy": st.session_state.get("current_enemy", None),
+        "pending_enemy": st.session_state.get("pending_enemy", None),
         "weapon_shop": st.session_state.get("weapon_shop", []),
         "armor_shop": st.session_state.get("armor_shop", []),
         "magic_guild": st.session_state.get("magic_guild", []),
@@ -243,6 +244,9 @@ if "game_mode" not in st.session_state:
 
 if "current_enemy" not in st.session_state:
     st.session_state.current_enemy = saved_data.get("current_enemy", None)
+
+if "pending_enemy" not in st.session_state:
+    st.session_state.pending_enemy = saved_data.get("pending_enemy", None)
 
 
 # 📈 [경험치 및 레벨업 처리]
@@ -641,7 +645,23 @@ def call_gemini_turn(user_action):
 
 
 def process_user_action(user_action):
-    st.session_state.history.append({"role": "user", "narrative": user_action})
+    # 적과 조우한 상태(pending_enemy)에서 선택지를 골랐을 경우 처리
+    if st.session_state.get("pending_enemy"):
+        if user_action == "싸운다":
+            st.session_state.history.append({"role": "user", "narrative": user_action})
+            st.session_state.current_enemy = st.session_state.pending_enemy
+            st.session_state.pending_enemy = None
+            st.session_state.game_mode = "COMBAT"
+            save_game()
+            st.rerun()
+            return
+        elif user_action == "도망친다":
+            st.session_state.history.append({"role": "user", "narrative": user_action})
+            st.session_state.pending_enemy = None
+            # 도망친 후에는 전투가 시작되지 않고, '도망친다' 행동을 AI에게 전달하여 다음 AI 메시지가 나오도록 처리
+
+    else:
+        st.session_state.history.append({"role": "user", "narrative": user_action})
 
     with st.spinner("중간계의 운명이 전개되는 중..."):
         res = call_gemini_turn(user_action)
@@ -725,15 +745,7 @@ def process_user_action(user_action):
                             f"\n\n🥋 새로운 전투 기술 [{name}]이(가) 등록되었습니다!"
                         )
 
-            st.session_state.history.append({
-                "role": "assistant",
-                "narrative": narrative_text,
-                "choices": choices,
-            })
-            trim_ai_history()
-
             if res.start_combat:
-                st.session_state.game_mode = "COMBAT"
                 lvl = stats["level"]
                 archetype = res.enemy_archetype
                 hp_scale = 30 + (lvl * 15)
@@ -747,7 +759,7 @@ def process_user_action(user_action):
                 ):
                     enemy_name = stats["active_quest"]["target_enemy"]
 
-                st.session_state.current_enemy = {
+                st.session_state.pending_enemy = {
                     "name": enemy_name,
                     "level": lvl,
                     "hp": int(hp_scale),
@@ -756,6 +768,17 @@ def process_user_action(user_action):
                     "defense": int(def_scale),
                 }
 
+                # 전투가 시작되기 전 AI 메시지의 마지막 부분에 적의 HP와 공격력 표시
+                narrative_text += f"\n\n⚔️ **[적 조우: {enemy_name}]** (HP: {int(hp_scale)}, 공격력: {int(atk_scale)})"
+                choices = ["싸운다", "도망친다"]
+                st.session_state.game_mode = "EXPLORATION"
+
+            st.session_state.history.append({
+                "role": "assistant",
+                "narrative": narrative_text,
+                "choices": choices,
+            })
+            trim_ai_history()
             save_game()
             st.rerun()
 
@@ -858,7 +881,7 @@ with main_col:
 
             msg_slot = st.empty()
 
-            # 🤖 [자동 전투 턴 계산: API 호출 없이 스킬/기본공격 중 가장 강력한 공격 자동 수행]
+            # 🤖 [자동 전투 턴 계산: API 호출 없이 파이썬 내부 연산만 수행]
             best_attack_name = "기본 공격"
             p_dmg = 0
             best_skill = None
