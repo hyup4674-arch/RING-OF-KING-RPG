@@ -39,7 +39,9 @@ class StatUpItemResponse(BaseModel):
 
 
 class GameResponse(BaseModel):
-    narrative: str = Field(description="1~2문장으로 매우 간결하게 요약된 스토리 서사 묘사.")
+    narrative: str = Field(
+        description="1~2문장으로 매우 간결하게 요약된 스토리 서사 묘사."
+    )
     choices: list[str] = Field(
         default=["주변을 탐색한다", "안전한 곳으로 이동한다"],
         description="플레이어가 선택할 수 있는 정확히 2개의 선택지 리스트",
@@ -236,7 +238,7 @@ if "history" not in st.session_state:
                 "중간계의 평화로운 샤이어에서 모험이 시작됩니다. 어둠의 그림자가"
                 " 서서히 드리우고 있습니다."
             ),
-            "choices": ["브리 마을을 향해 길을 떠난다", "주변 숲에서 정비한다"],
+            "choices": ["주변을 탐색한다", "안전한 곳으로 이동한다"],
         })
 
 if "game_mode" not in st.session_state:
@@ -268,100 +270,7 @@ def add_exp(amount):
     return leveled_up
 
 
-# 🤖 [스탯 마일스톤 보상 생성]
-def generate_stat_milestone_reward(
-    api_key, selected_model, stat_name, stat_val
-):
-    if not api_key:
-        return
-    try:
-        client = genai.Client(api_key=api_key)
-        existing_weapons = [
-            w["name"] for w in st.session_state.get("weapon_shop", [])
-        ]
-        existing_armors = [
-            a["name"] for a in st.session_state.get("armor_shop", [])
-        ]
-        existing_magics = [
-            m["name"] for m in st.session_state.get("magic_guild", [])
-        ]
-        existing_skills = [
-            s["name"] for s in st.session_state.get("combat_dojo", [])
-        ]
-
-        prompt = (
-            f"현재 플레이어 레벨: {stats['level']}\n"
-            f"성장한 스탯: {stat_name} (도달 수치: {stat_val})\n"
-            f"이미 등록된 무기: {existing_weapons}\n"
-            f"이미 등록된 방어구: {existing_armors}\n"
-            f"이미 등록된 마법: {existing_magics}\n"
-            f"이미 등록된 스킬: {existing_skills}\n"
-            "반지의 제왕 세계관에 걸맞으며 기존 목록과 겹치지 않는 유니크한 장비, 마법 또는 기술 하나를 생성해주세요."
-        )
-        response = client.models.generate_content(
-            model=selected_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=StatUpItemResponse,
-                temperature=0.8,
-            ),
-        )
-        item_data = StatUpItemResponse.model_validate_json(response.text)
-
-        t = item_data.item_type.lower()
-        name = item_data.name.strip()
-        req = item_data.required_stat
-
-        if t == "weapon" and name not in existing_weapons:
-            damage = int(req * 1.2)
-            price = damage * 6
-            st.session_state.weapon_shop.append({
-                "name": name,
-                "damage": damage,
-                "required_str": req,
-                "price": price,
-            })
-            st.toast(f"✨ 중간계의 명검 [{name}]이(가) 대장간에 입고되었습니다!")
-        elif t == "armor" and name not in existing_armors:
-            defense = int(req * 0.8)
-            price = defense * 7
-            st.session_state.armor_shop.append({
-                "name": name,
-                "defense": defense,
-                "required_con": req,
-                "price": price,
-            })
-            st.toast(
-                f"✨ 중간계의 방어구 [{name}]이(가) 대장간에 입고되었습니다!"
-            )
-        elif t == "magic" and name not in existing_magics:
-            damage = int(req * 1.5)
-            mp_cost = req
-            price = damage * 25
-            st.session_state.magic_guild.append({
-                "name": name,
-                "damage": damage,
-                "mp_cost": mp_cost,
-                "price": price,
-            })
-            st.toast(
-                f"🔮 고대의 마법 [{name}]이(가) 마법 길드에 연구되었습니다!"
-            )
-        elif t == "skill" and name not in existing_skills:
-            damage = int(req * 1.2)
-            mp_cost = int(10 + (damage * 0.3))
-            st.session_state.combat_dojo.append({
-                "name": name,
-                "damage": damage,
-                "mp_cost": mp_cost,
-            })
-            st.toast(f"🥋 전설의 전투 기술 [{name}]이(가) 훈련소에 등록되었습니다!")
-    except Exception:
-        pass
-
-
-# ⚙️ [좌측 슬라이드 창 설정]
+# ⚙️ [사이드바 메뉴]
 st.sidebar.header("⚙️ 게임 설정 및 메뉴")
 
 api_key_input = DEFAULT_API_KEY
@@ -458,7 +367,7 @@ with st.sidebar.expander("🎒 인벤토리 & 보유 기술", expanded=True):
     else:
         st.write("마나 포션 없음")
 
-# 🏘️ [마을 시설 방문 - API 호출 없이 즉시 처리]
+# 🏘️ [마을 시설]
 with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
     tab_shop, tab_potion, tab_inn, tab_quest, tab_dojo, tab_magic = st.tabs([
         "⚔️ 대장간",
@@ -584,7 +493,7 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                 st.text(f"✅ {mg['name']} (연구됨)")
 
 
-# 🤖 [AI 턴 생성 함수 - 반지의 제왕 스토리 기반]
+# 🤖 [AI 턴 생성 함수]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
 
@@ -603,8 +512,7 @@ def call_gemini_turn(user_action):
 
     system_instruction = (
         "당신은 판타지 RPG의 게임 마스터(GM)이며, 전체 세계관과 스토리는 '반지의 제왕' (The Lord of the Rings)의 서사를 기반으로 진행됩니다.\n"
-        "중간계(Middle-earth)의 배경(샤이어, 리븐델, 모르도르 등)과 원작의 거대한 서사 흐름(절대반지 파괴를 향한 여정, 사루만과 사우론의 위협 등)을 충실히 반영하세요.\n"
-        "플레이어는 이 세계 속에서 성장하며 주변 사건에 참여하고 기여할 수 있지만, '반지의 제왕'의 거대한 역사적 흐름이나 핵심 운명을 왜곡하거나 방해해서는 안 됩니다.\n"
+        "중간계(Middle-earth)의 배경(샤이어, 리븐델, 모르도르 등)과 원작의 거대한 서사 흐름을 충실히 반영하세요.\n"
         "모든 서사(narrative)는 반드시 1~2문장으로 매우 간결하고 핵심만 담아 작성하세요.\n"
         "반드시 플레이어가 다음에 선택할 수 있는 2개의 선택지(choices)를 문자열 리스트로 함께 제공하세요.\n"
         "전투가 필요하면 start_combat을 True로 설정하고 적 정보와 유형(beast, bandit, undead, mage)을 지정하세요.\n"
@@ -645,26 +553,34 @@ def call_gemini_turn(user_action):
 
 
 def process_user_action(user_action):
-    # 적과 조우한 상태(pending_enemy)에서 선택지를 골랐을 경우 처리
+    clean_action = str(user_action).strip()
+
+    # 🛡️ 적 조우 상태(pending_enemy)에서 '싸운다' / '도망친다' 분기 처리
     if st.session_state.get("pending_enemy"):
-        if user_action == "싸운다":
-            st.session_state.history.append({"role": "user", "narrative": user_action})
+        if "싸운다" in clean_action or "1️⃣" in clean_action:
+            st.session_state.history.append({
+                "role": "user",
+                "narrative": "싸운다",
+            })
             st.session_state.current_enemy = st.session_state.pending_enemy
             st.session_state.pending_enemy = None
             st.session_state.game_mode = "COMBAT"
             save_game()
             st.rerun()
             return
-        elif user_action == "도망친다":
-            st.session_state.history.append({"role": "user", "narrative": user_action})
+        elif "도망" in clean_action or "2️⃣" in clean_action:
+            st.session_state.history.append({
+                "role": "user",
+                "narrative": "도망친다",
+            })
             st.session_state.pending_enemy = None
-            # 도망친 후에는 전투가 시작되지 않고, '도망친다' 행동을 AI에게 전달하여 다음 AI 메시지가 나오도록 처리
+            clean_action = "적에게서 무사히 도망쳤다. 다음으로 이동한다."
 
-    else:
-        st.session_state.history.append({"role": "user", "narrative": user_action})
+    st.session_state.history.append({"role": "user", "narrative": clean_action})
 
+    # 탐색 모드에서만 AI API 호출
     with st.spinner("중간계의 운명이 전개되는 중..."):
-        res = call_gemini_turn(user_action)
+        res = call_gemini_turn(clean_action)
 
         if res:
             narrative_text = res.narrative
@@ -747,7 +663,6 @@ def process_user_action(user_action):
 
             if res.start_combat:
                 lvl = stats["level"]
-                archetype = res.enemy_archetype
                 hp_scale = 30 + (lvl * 15)
                 atk_scale = 8 + (lvl * 2)
                 def_scale = 2 + (lvl * 1)
@@ -768,10 +683,9 @@ def process_user_action(user_action):
                     "defense": int(def_scale),
                 }
 
-                # 전투가 시작되기 전 AI 메시지의 마지막 부분에 적의 HP와 공격력 표시
+                # 전투 시작 전 AI 메시지 끝에 적 HP와 공격력 명시
                 narrative_text += f"\n\n⚔️ **[적 조우: {enemy_name}]** (HP: {int(hp_scale)}, 공격력: {int(atk_scale)})"
                 choices = ["싸운다", "도망친다"]
-                st.session_state.game_mode = "EXPLORATION"
 
             st.session_state.history.append({
                 "role": "assistant",
@@ -783,7 +697,7 @@ def process_user_action(user_action):
             st.rerun()
 
 
-# 🖥️ [메인 화면 영역]
+# 🖥️ [메인 화면]
 main_col, right_col = st.columns([3, 1])
 
 with right_col:
@@ -806,19 +720,11 @@ with right_col:
         if col_s1.button("💪 힘+1", use_container_width=True, key="stat_str"):
             stats["str"] += 1
             stats["stat_points"] -= 1
-            if stats["str"] % 3 == 0:
-                generate_stat_milestone_reward(
-                    api_key_input, selected_model, "힘(str)", stats["str"]
-                )
             save_game()
             st.rerun()
         if col_s2.button("⚡ 민첩+1", use_container_width=True, key="stat_agi"):
             stats["agi"] += 1
             stats["stat_points"] -= 1
-            if stats["agi"] % 3 == 0:
-                generate_stat_milestone_reward(
-                    api_key_input, selected_model, "민첩(agi)", stats["agi"]
-                )
             save_game()
             st.rerun()
         col_s3, col_s4 = st.columns(2)
@@ -827,10 +733,6 @@ with right_col:
             stats["max_hp"] += 3
             stats["hp"] = stats["max_hp"]
             stats["stat_points"] -= 1
-            if stats["con"] % 3 == 0:
-                generate_stat_milestone_reward(
-                    api_key_input, selected_model, "체력(con)", stats["con"]
-                )
             save_game()
             st.rerun()
         if col_s4.button("🧠 지능+1", use_container_width=True, key="stat_int"):
@@ -838,10 +740,6 @@ with right_col:
             stats["max_mp"] += 2
             stats["mp"] = stats["max_mp"]
             stats["stat_points"] -= 1
-            if stats["int"] % 3 == 0:
-                generate_stat_milestone_reward(
-                    api_key_input, selected_model, "지능(int)", stats["int"]
-                )
             save_game()
             st.rerun()
 
@@ -849,10 +747,10 @@ with main_col:
     if not api_key_input:
         st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
     else:
+        # ⚔️ [전투 모드: API 호출 없이 local 파이썬 엔진으로만 구동]
         if st.session_state.game_mode == "COMBAT":
             enemy = st.session_state.current_enemy
 
-            # 붉은색 HP 막대 (왼쪽) 및 푸른색 HP 막대 (오른쪽) 가로로 크게 배치
             st.markdown(
                 f"""
                 <div style="display: flex; justify-content: space-between; gap: 20px; margin-bottom: 25px; background-color: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #444;">
@@ -881,7 +779,7 @@ with main_col:
 
             msg_slot = st.empty()
 
-            # 🤖 [자동 전투 턴 계산: API 호출 없이 파이썬 내부 연산만 수행]
+            # 🤖 자동 전투 턴 계산 (파이썬 독립 연산)
             best_attack_name = "기본 공격"
             p_dmg = 0
             best_skill = None
@@ -932,7 +830,7 @@ with main_col:
                 })
                 trim_ai_history()
                 msg_slot.info(log)
-                time.sleep(3)
+                time.sleep(2)
                 msg_slot.empty()
                 save_game()
                 st.rerun()
@@ -956,13 +854,13 @@ with main_col:
                     })
                     trim_ai_history()
                     msg_slot.info(log)
-                    time.sleep(3)
+                    time.sleep(2)
                     msg_slot.empty()
                     save_game()
                     st.rerun()
 
             msg_slot.info(log)
-            time.sleep(3)
+            time.sleep(2)
             msg_slot.empty()
             save_game()
             st.rerun()
