@@ -388,6 +388,23 @@ with st.sidebar.expander("🎒 인벤토리 & 보유 기술", expanded=True):
         st.write(f"- {a['name']} (방어력:{a['defense']})")
 
     st.markdown("---")
+    st.markdown("**[보유 스킬 목록]**")
+    if stats.get("learned_skills"):
+        for sk in stats["learned_skills"]:
+            st.write(f"- {sk['name']} (위력:{sk['damage']}, MP:{sk['mp_cost']})")
+    else:
+        st.write("보유 스킬 없음")
+
+    st.markdown("**[보유 마법 목록]**")
+    if stats.get("learned_magic"):
+        for mg in stats["learned_magic"]:
+            st.write(
+                f"- {mg['name']} (위력:{mg['damage']}, MP:{mg['mp_cost']})"
+            )
+    else:
+        st.write("보유 마법 없음")
+
+    st.markdown("---")
     st.markdown("**[포션]**")
     total_hp_p = sum(stats["hp_potions"].values())
     if total_hp_p > 0:
@@ -752,28 +769,49 @@ with main_col:
 
             msg_slot = st.empty()
 
+            # 💡 [전투 시 스킬, 마법, 기본 공격(무기 포함) 위력을 비교하여 최적의 공격을 적용하는 로직]
             best_attack_name = "기본 공격"
             p_dmg = 0
-            best_skill = None
-            max_skill_dmg = -1
+            chosen_type = None
+            chosen_action = None
+            max_action_dmg = -1
 
+            # 1. 보유 스킬 확인 (힘 기반 스케일링)
             for sk in stats.get("learned_skills", []):
                 if stats["mp"] >= sk["mp_cost"]:
-                    s_dmg = int(sk["damage"] + (stats["str"] * 0.5))
-                    if s_dmg > max_skill_dmg:
-                        max_skill_dmg = s_dmg
-                        best_skill = sk
+                    s_dmg = int(sk["damage"] + (stats["str"] * 0.6))
+                    if s_dmg > max_action_dmg:
+                        max_action_dmg = s_dmg
+                        best_attack_name = f"스킬 [{sk['name']}]"
+                        chosen_type = "skill"
+                        chosen_action = sk
 
-            if best_skill:
-                best_attack_name = f"스킬 [{best_skill['name']}]"
-                stats["mp"] -= best_skill["mp_cost"]
-                crit = random.random() < (stats["agi"] * 0.005)
-                mult = 1.5 if crit else 1.0
-                p_dmg = max(1, int((max_skill_dmg - enemy["defense"]) * mult))
+            # 2. 보유 마법 확인 (지능 기반 스케일링)
+            for mg in stats.get("learned_magic", []):
+                if stats["mp"] >= mg["mp_cost"]:
+                    m_dmg = int(mg["damage"] + (stats["int"] * 0.8))
+                    if m_dmg > max_action_dmg:
+                        max_action_dmg = m_dmg
+                        best_attack_name = f"마법 [{mg['name']}]"
+                        chosen_type = "magic"
+                        chosen_action = mg
+
+            # 3. 크리티컬 판정 계산 (민첩 기반)
+            crit = random.random() < (stats["agi"] * 0.005)
+            mult = 1.5 if crit else 1.0
+
+            if chosen_type == "skill":
+                stats["mp"] -= chosen_action["mp_cost"]
+                p_dmg = max(1, int((max_action_dmg - enemy["defense"]) * mult))
+            elif chosen_type == "magic":
+                stats["mp"] -= chosen_action["mp_cost"]
+                # 마법은 방어력을 일부 관통하여 데미지 계산
+                p_dmg = max(
+                    1,
+                    int((max_action_dmg - int(enemy["defense"] * 0.5)) * mult),
+                )
             else:
                 base_atk = stats["str"] + stats["equipped_weapon"]["damage"]
-                crit = random.random() < (stats["agi"] * 0.005)
-                mult = 1.5 if crit else 1.0
                 p_dmg = max(1, int((base_atk - enemy["defense"]) * mult))
 
             enemy["hp"] -= p_dmg
