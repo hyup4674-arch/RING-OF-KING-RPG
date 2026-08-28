@@ -8,18 +8,18 @@ from google.genai import types
 from pydantic import BaseModel, Field
 
 DEFAULT_API_KEY = ""
-SAVE_FILE = "rpg_save_v8_revert.json"
+SAVE_FILE = "rpg_save_v9.json"
 
 st.set_page_config(
     page_title="AI 연동 동기화 파이썬 엔진 RPG", page_icon="⚔️", layout="wide"
 )
-st.title("⚔️ 반지의 제왕: AI 서사 + 실시간 턴제 전투 엔진 RPG")
+st.title("⚔️ 반지의 제왕: 순수 서사 + 상점 리뉴얼 턴제 RPG")
 
 
-# 📋 [Pydantic 스키마 - 게임 서사 전용 (아이템 생성 제거)]
+# 📋 [Pydantic 스키마 - 게임 서사 전용 (아이템/스킬 생성 원천 차단)]
 class GameResponse(BaseModel):
     narrative: str = Field(
-        description="1~2문장으로 매우 간결하게 요약된 스토리 서사 묘사."
+        description="1~2문장으로 매우 간결하게 요약된 스토리 서사 묘사. (아이템, 마법, 스킬 획득 언급 절대 금지)"
     )
     choices: list[str] = Field(
         default=["주변을 탐색한다", "안전한 곳으로 이동한다"],
@@ -208,12 +208,12 @@ def renew_shop_via_ai(api_key, model_id, player_stats):
         client = genai.Client(api_key=api_key)
         prompt = f"""
         플레이어의 현재 스탯:
-        - 힘(str): {player_stats['str']} (무기 요구치와 연관)
-        - 체력(con): {player_stats['con']} (방어구 요구치와 연관)
-        - 최대마나(mp): {player_stats['max_mp']} (마법/스킬 소모량과 연관)
+        - 힘(str): {player_stats['str']}
+        - 체력(con): {player_stats['con']}
+        - 최대마나(mp): {player_stats['max_mp']}
 
-        위 스탯을 바탕으로 플레이어가 **즉시 장착하거나 사용할 수 있는** 수준의 새로운 무기, 방어구, 마법, 기술을 총 3~4개 무작위로 생성해주세요.
-        주의: 요구 스탯(required_stat)은 1 이상이며, **반드시 플레이어의 현재 스탯 이하**로 설정해야 플레이어가 바로 구매하여 장착할 수 있습니다.
+        위 스탯을 바탕으로 플레이어가 **즉시 장착하거나 사용할 수 있는** 새로운 무기, 방어구, 마법, 기술을 총 3~4개 무작위로 생성해주세요.
+        요구 스탯(required_stat)은 1 이상이며, **반드시 플레이어의 현재 스탯 이하**로 설정하여 플레이어가 바로 구매할 수 있게 하세요.
         """
         response = client.models.generate_content(
             model=model_id,
@@ -251,7 +251,7 @@ def renew_shop_via_ai(api_key, model_id, player_stats):
         
         if added_count > 0:
             save_game()
-            st.toast("✨ 플레이어 스탯에 맞춘 신규 장비와 스킬이 마을에 입고되었습니다!", icon="🎉")
+            st.toast("✨ 플레이어 스탯에 맞춘 신규 장비와 스킬이 상점에 입고되었습니다!", icon="🎉")
     except Exception as e:
         st.toast("상점 리뉴얼에 실패했습니다. API 키나 네트워크를 확인해주세요.", icon="❌")
 
@@ -276,7 +276,7 @@ with st.sidebar.expander("🔑 AI 모델 및 클라우드 세이브", expanded=T
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE, "r", encoding="utf-8") as f:
             save_data_str = f.read()
-        st.download_button(label="📥 세이브 파일 백업", data=save_data_str, file_name="rpg_save_v8_revert.json", mime="application/json", use_container_width=True)
+        st.download_button(label="📥 세이브 파일 백업", data=save_data_str, file_name="rpg_save_v9.json", mime="application/json", use_container_width=True)
 
 stats = st.session_state.stats
 
@@ -346,13 +346,15 @@ with st.sidebar.expander("🏘️ 마을 시설 방문 (장비/포션 구매)", 
                     st.rerun()
 
 
-# 🤖 [AI 스토리 전개 턴 생성 함수 (아이템 생성 배제)]
+# 🤖 [AI 스토리 전개 턴 생성 함수 (아이템 발명 완전 차단)]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
     system_instruction = (
-        "당신은 판타지 RPG의 게임 마스터(GM)입니다. '반지의 제왕'의 세계관과 거대한 서사 흐름에만 온전히 집중하세요.\n"
-        "모든 서사(narrative)는 1~2문장으로 간결하게 작성하고, 다음에 플레이어가 취할 행동 2가지를 선택지(choices)로 반드시 제공하세요.\n"
-        "🚨 [중요: 아이템 발명 절대 금지] 서사를 전개하는 와중에 플레이어가 새로운 마법, 장비, 기술, 아이템을 발견했다거나 얻었다는 내용을 절대로 생성하지 마세요.\n"
+        "당신은 판타지 RPG의 게임 마스터(GM)입니다. '반지의 제왕' 세계관의 서사 전개와 탐색에만 온전히 집중하세요.\n\n"
+        "🚨 [절대 엄수 규칙: 아이템/스킬/마법 획득 금지]\n"
+        "- 서사(narrative) 안에서 플레이어가 새로운 무기, 방어구, 아이템, 마법, 기술을 발견하거나 획득했다는 내용을 **절대** 작성하지 마세요.\n"
+        "- 모든 장비와 기술은 오직 우측 상점 메뉴를 통해서만 획득되므로, 스토리 중에는 절대 보상으로 주지 마세요.\n\n"
+        "모든 서사는 1~2문장으로 간결하게 작성하고, 다음에 플레이어가 취할 행동 2가지를 선택지(choices)로 반드시 제공하세요.\n"
         "전투가 필요한 이벤트라면 start_combat을 True로 설정하고 적의 정보를 지정하세요."
     )
     prompt = (
@@ -389,10 +391,7 @@ def process_user_action(user_action):
             st.session_state.current_enemy = st.session_state.pending_enemy
             st.session_state.pending_enemy = None
             st.session_state.game_mode = "COMBAT"
-            
-            # 전투 진입 시 전투 로그 초기화
             st.session_state.combat_log = []
-            
             save_game()
             st.rerun() 
             return
@@ -433,7 +432,7 @@ def process_user_action(user_action):
 # 🖥️ [메인 화면 UI 영역]
 main_col, right_col = st.columns([3, 1])
 
-# [우측 슬라이드 (상태 및 상점 리뉴얼)]
+# [우측 슬라이드 (상태 및 상점 리뉴얼 버튼)]
 with right_col:
     st.subheader("🛡️ 기본 능력치")
     st.metric(label="⭐ 레벨", value=f"Lv. {stats['level']}")
@@ -444,7 +443,7 @@ with right_col:
     st.markdown("---")
     st.write(f"- **힘**: {stats['str']} | **민첩**: {stats['agi']}\n- **체력**: {stats['con']} | **지능**: {stats['int']}")
     
-    # 🔄 [상점 리뉴얼 버튼]
+    # 🔄 [상점 리뉴얼 버튼 (아이템/스킬 입고 전용)]
     st.markdown("---")
     st.subheader("🛒 상점 리뉴얼")
     if st.button("🔄 착용 가능 신규 물품 입고 (AI)", use_container_width=True):
@@ -460,13 +459,12 @@ with main_col:
     if not api_key_input:
         st.warning("⚠️ 사이드바에 Google Gemini API 키를 입력해 주세요.")
     else:
-        # ⚔️ [전투 모드: 턴마다 렌더링되는 실시간 체력바 전투 (이전 방식)]
+        # ⚔️ [전투 모드: 실시간 턴제 렌더링 전투]
         if st.session_state.game_mode == "COMBAT":
             enemy = st.session_state.current_enemy
             
             st.subheader(f"⚔️ 전투 진행 중: {enemy['name']}")
             
-            # 전투 UI (체력바)
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"**🛡️ 플레이어** (Lv.{stats['level']})")
@@ -482,18 +480,15 @@ with main_col:
 
             st.markdown("---")
             
-            # 실시간 전투 로그 출력
             if "combat_log" not in st.session_state:
                 st.session_state.combat_log = []
                 
             for log in st.session_state.combat_log:
                 st.write(log)
                 
-            # 턴 진행 로직 (쌍방의 체력이 남았을 때만 자동 루프)
             if enemy["hp"] > 0 and stats["hp"] > 0:
-                time.sleep(1) # 턴 사이의 긴장감을 위한 1초 딜레이
+                time.sleep(1)
                 
-                # 1. 플레이어 공격 연산
                 best_attack_name = "기본 공격"
                 max_skill_dmg = -1
                 best_skill = None
@@ -520,7 +515,6 @@ with main_col:
                 crit_str = " **[크리티컬!]**" if crit else ""
                 st.session_state.combat_log.append(f"🗡️ 플레이어의 {best_attack_name}{crit_str}! 적에게 **{p_dmg}** 데미지")
 
-                # 2. 적 반격 연산 (적이 살아있을 경우에만)
                 if enemy["hp"] > 0:
                     total_player_def = stats["equipped_armor"].get("defense", 0) + stats["con"]
                     e_dmg = max(1, enemy["atk"] - total_player_def)
@@ -528,9 +522,8 @@ with main_col:
                     st.session_state.combat_log.append(f"🩸 적의 공격! 플레이어에게 **{e_dmg}** 데미지")
                 
                 save_game()
-                st.rerun() # 다음 턴을 그리기 위해 즉시 리런 (스피너 발생)
+                st.rerun()
                 
-            # 전투 종료 판정
             else:
                 st.markdown("---")
                 if enemy["hp"] <= 0:
@@ -554,9 +547,7 @@ with main_col:
                     st.error("💀 전투 패배... 의식을 잃고 간신히 목숨만 부지했습니다.")
                     stats["hp"] = 15
 
-                # 복귀 버튼
                 if st.button("탐색 모드로 돌아가기", use_container_width=True):
-                    # 전투 결과를 간단히 요약하여 채팅 기록에 추가
                     summary = f"⚔️ {enemy['name']} 와(과)의 전투에서 {'승리했습니다!' if enemy['hp'] <= 0 else '패배하여 도망쳤습니다...'}"
                     choices = ["주변을 탐색한다", "안전한 곳으로 이동한다"] if stats["hp"] > 15 else ["서둘러 여관으로 향한다", "포션을 마신다"]
                     
