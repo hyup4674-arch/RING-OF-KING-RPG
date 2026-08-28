@@ -420,9 +420,12 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
         st.write("장비 구매 및 강화")
         st.markdown("**[무기 상점]**")
         for i, w in enumerate(st.session_state.weapon_shop):
-            if st.button(
-                f"구매: {w['name']} ({w['price']}G)", key=f"w_{w['name']}_{i}"
-            ):
+            st.markdown(
+                f"- **{w['name']}**<br>공격력: `{w['damage']}` | 필요 힘:"
+                f" `{w['required_str']}` | 가격: `{w['price']}G`",
+                unsafe_allow_html=True,
+            )
+            if st.button(f"구매하기", key=f"w_{w['name']}_{i}"):
                 if stats["gold"] >= w["price"]:
                     if stats["str"] >= w["required_str"]:
                         stats["gold"] -= w["price"]
@@ -435,12 +438,16 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.error("힘 부족")
                 else:
                     st.error("골드 부족")
+            st.markdown("---")
 
         st.markdown("**[방어구 상점]**")
         for i, a in enumerate(st.session_state.armor_shop):
-            if st.button(
-                f"구매: {a['name']} ({a['price']}G)", key=f"a_{a['name']}_{i}"
-            ):
+            st.markdown(
+                f"- **{a['name']}**<br>방어력: `{a['defense']}` | 필요 체력:"
+                f" `{a['required_con']}` | 가격: `{a['price']}G`",
+                unsafe_allow_html=True,
+            )
+            if st.button(f"구매하기", key=f"a_{a['name']}_{i}"):
                 if stats["gold"] >= a["price"]:
                     if stats["con"] >= a["required_con"]:
                         stats["gold"] -= a["price"]
@@ -453,6 +460,7 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.error("체력 부족")
                 else:
                     st.error("골드 부족")
+            st.markdown("---")
 
     with tab_potion:
         st.write("포션 구입")
@@ -501,10 +509,15 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.rerun()
 
     with tab_dojo:
-        st.write("스킬 습득")
+        st.write("스킬 습득 (스킬 포인트 필요)")
         for i, sk in enumerate(st.session_state.combat_dojo):
             if sk not in stats["learned_skills"]:
-                if st.button(f"습득: {sk['name']}", key=f"sk_{sk['name']}_{i}"):
+                st.markdown(
+                    f"- **{sk['name']}**<br>위력(데미지): `{sk['damage']}` | 소모"
+                    f" MP: `{sk['mp_cost']}`",
+                    unsafe_allow_html=True,
+                )
+                if st.button(f"습득", key=f"sk_{sk['name']}_{i}"):
                     if stats.get("skill_points", 0) > 0:
                         stats["learned_skills"].append(sk)
                         stats["skill_points"] -= 1
@@ -512,6 +525,7 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.rerun()
                     else:
                         st.error("포인트 부족")
+                st.markdown("---")
             else:
                 st.text(f"✅ {sk['name']} (습득됨)")
 
@@ -519,7 +533,12 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
         st.write("마법 연구")
         for i, mg in enumerate(st.session_state.magic_guild):
             if mg not in stats["learned_magic"]:
-                if st.button(f"연구: {mg['name']}", key=f"mg_{mg['name']}_{i}"):
+                st.markdown(
+                    f"- **{mg['name']}**<br>위력(데미지): `{mg['damage']}` | 소모"
+                    f" MP: `{mg['mp_cost']}` | 가격: `{mg['price']}G`",
+                    unsafe_allow_html=True,
+                )
+                if st.button(f"연구", key=f"mg_{mg['name']}_{i}"):
                     if stats["gold"] >= mg["price"]:
                         stats["gold"] -= mg["price"]
                         stats["learned_magic"].append(mg)
@@ -527,11 +546,12 @@ with st.sidebar.expander("🏘️ 마을 시설 방문", expanded=True):
                         st.rerun()
                     else:
                         st.error("골드 부족")
+                st.markdown("---")
             else:
                 st.text(f"✅ {mg['name']} (연구됨)")
 
 
-# 🤖 [AI 턴 생성 함수 (아이템 생성 로직 제거)]
+# 🤖 [AI 턴 생성 함수]
 def call_gemini_turn(user_action):
     client = genai.Client(api_key=api_key_input)
 
@@ -795,10 +815,11 @@ with main_col:
                 log += f"\n적의 반격으로 {e_dmg}의 피해를 입었다!"
 
                 if stats["hp"] <= 0:
-                    stats["hp"] = 15
+                    stats["hp"] = stats["max_hp"]
+                    stats["mp"] = stats["max_mp"]
                     st.session_state.game_mode = "EXPLORATION"
                     st.session_state.current_enemy = None
-                    log += f"\n💀 전투에서 쓰러졌으나 간신히 정신을 차렸다."
+                    log += f"\n💀 전투에서 쓰러졌으나 정신을 차리며 체력과 마나가 완전히 회복되었다."
                     st.session_state.history.append({
                         "role": "assistant",
                         "narrative": log,
